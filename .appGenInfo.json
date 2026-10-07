@@ -1,0 +1,32 @@
+{
+  "generationParameters": {
+    "generationDate": "Wed Sep 23 2026 12:34:22 GMT+0900 (Korean Standard Time)",
+    "generatorPlatform": "Visual Studio Code",
+    "serviceType": "OData URL",
+    "metadataFilename": "",
+    "serviceUrl": "https://saphana2.s-pert.com:44360/sap/opu/odata4/sap/zsp_itsm_p_request_ui_v4/srvd/sap/zsp_itsm_p_request_ui/0001/",
+    "appName": "zspf_request",
+    "appTitle": "고객업체 요청관리",
+    "appDescription": "고객업체 요청관리",
+    "appNamespace": "zsp.itsm",
+    "ui5Theme": "sap_horizon",
+    "ui5Version": "1.152.0",
+    "enableEslint": true,
+    "enableTypeScript": false,
+    "showMockDataInfo": true,
+    "generatorVersion": "1.32.0",
+    "template": "List Report Page V4",
+    "generatorName": "SAP Fiori Application Generator",
+    "entityRelatedConfig": [
+      {
+        "type": "Main Entity",
+        "value": "Main"
+      },
+      {
+        "type": "Navigation Entity",
+        "value": "None"
+      }
+    ],
+    "launchText": "To launch the generated application, run the following from the generated application root folder:\n\n```\n    npm start\n```"
+  }
+}

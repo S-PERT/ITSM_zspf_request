@@ -1,0 +1,18 @@
+.cm-editor{width:100%;box-sizing:border-box;border:1px solid var(--sapGroup_ContentBorderColor,#dce1e8);border-radius:12px;background:var(--sapGroup_ContentBackground,#fff);overflow:hidden;color:var(--sapTextColor,#1d2738)}
+.cm-editor:focus-within{border-color:var(--sapField_Focus_BorderColor,#687dec);box-shadow:0 0 0 2px rgba(99,102,241,.08)}
+.cm-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:10px 14px;border-bottom:1px solid var(--sapGroup_ContentBorderColor,#e8ebf0);background:var(--sapToolbar_Background,#fafbfc)}
+.cm-toolbar button,.cm-toolbar select,.cm-link-panel button{font:inherit;font-size:13px;color:inherit;background:transparent;border:0;border-radius:6px;min-height:32px;padding:5px 9px;cursor:pointer}
+.cm-toolbar select{border-right:1px solid #e0e4ec;border-radius:0;margin-right:5px;min-width:85px}
+.cm-toolbar button:hover,.cm-toolbar button[aria-pressed=true]{background:var(--sapList_SelectionBackgroundColor,#eaf0ff);color:var(--sapSelectedColor,#4359bd)}
+.cm-toolbar button:disabled{opacity:.35;cursor:default}.cm-toolbar button:focus-visible,.cm-toolbar select:focus-visible{outline:2px solid var(--sapContent_FocusColor,#5865d8);outline-offset:1px}
+.cm-bold{font-weight:750!important}.cm-italic{font-style:italic!important}.cm-table-actions{display:contents}.cm-table-actions[hidden]{display:none}
+.cm-document{padding:28px 32px;min-height:320px;outline:none;font-family:var(--sapFontFamily,'Arial',sans-serif);font-size:15px;line-height:1.75;overflow-wrap:anywhere;box-sizing:border-box;overflow-x:auto}
+.cm-document>:first-child{margin-top:0}.cm-document>:last-child{margin-bottom:0}.cm-document p{margin:0 0 .8em}.cm-document h1{font-size:1.9em;line-height:1.35}.cm-document h2{font-size:1.5em;line-height:1.4}.cm-document h3{font-size:1.2em}
+.cm-document img{max-width:100%;height:auto;vertical-align:middle}.cm-document .ProseMirror-selectednode{outline:2px solid #7886e8}
+.cm-document blockquote{border-left:3px solid #a6b0e7;margin:1em 0;padding:.2em 1.2em;color:var(--sapContent_LabelColor,#607088)}
+.cm-document pre{background:var(--sapList_Background,#f4f6f9);border:1px solid #e4e7ed;border-radius:8px;padding:16px;white-space:pre-wrap}.cm-document code{font-family:monospace}
+.cm-document table{border-collapse:collapse;max-width:100%;margin:1em 0}.cm-document td,.cm-document th{border:1px solid #d6dce6;padding:8px 12px;min-width:60px;vertical-align:top;position:relative}.cm-document th{background:var(--sapList_HeaderBackground,#f2f4f8);font-weight:600}.cm-document td>p:last-child,.cm-document th>p:last-child{margin-bottom:0}.cm-document .selectedCell:after{content:'';position:absolute;inset:0;background:#7c8be433;pointer-events:none}.cm-document a{color:var(--sapLinkColor,#4263c7)}
+.cm-editor-status{border-top:1px solid var(--sapGroup_ContentBorderColor,#e8ebf0);padding:9px 18px;font-size:12px;color:var(--sapContent_LabelColor,#768295)}
+.cm-editor-readonly{border:0;border-radius:0;box-shadow:none;background:transparent}.cm-document-readonly{min-height:0;padding:8px 0}.cm-document-readonly:empty{padding:0}
+.cm-link-panel{display:flex;gap:8px;padding:10px 18px;border-bottom:1px solid #e8ebf0}.cm-link-panel[hidden]{display:none}.cm-link-panel input{flex:1;min-width:0;padding:8px;border:1px solid #dce1e8;border-radius:6px}
+@media(max-width:600px){.cm-document{padding:20px 16px}.cm-document-readonly{padding:8px 0}.cm-toolbar{padding:8px}.cm-toolbar button{padding:5px 7px}}

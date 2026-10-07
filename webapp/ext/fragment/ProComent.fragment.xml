@@ -1,0 +1,13 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:editor="zsp.itsm.zspfrequest.ext.controller"> 
+    
+    <VBox class="sapUiContentPadding">
+        <editor:TiptapEditor
+            id="myRTE"
+            value="{path: 'ProComent', mode: 'TwoWay'}" 
+            editable="{ui>/isEditable}" />
+    </VBox>
+
+</core:FragmentDefinition>
