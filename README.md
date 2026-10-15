@@ -41,15 +41,15 @@
 1. Active NodeJS LTS (Long Term Support) version and associated supported NPM version.  (See https://nodejs.org)
 
 
-### Custom Extensions (Rich Text Editor & Selection Fields)
+### Custom Extensions & Enhancements
 
-Fiori Elements 표준 List Report V4 템플릿에 커스텀 에디터(Tiptap) 적용 및 Selection Filter 추가 구성을 적용한 내역입니다.
+Fiori Elements 표준 List Report / Object Page V4 템플릿에 적용된 커스텀 확장(Rich Text Editor, 댓글 피드, Side Effects, Cross-App Navigation 필터링 제어 등) 내역입니다.
 
 <br>
 
-#### 1) manifest.json — 커스텀 섹션을 ObjectPage에 등록
+#### 1) manifest.json — 커스텀 섹션 등록 (에디터 & 댓글)
 
-`sap.ui5 > routing > targets > MainObjectPage > options > settings > content > body > sections` 아래에 커스텀 섹션 2개(요청내역, 처리내역)를 선언합니다. ObjectPage 컨트롤러 확장을 통해 로드됩니다.
+`sap.ui5 > routing > targets > MainObjectPage > options > settings > content > body > sections` 아래에 커스텀 섹션 3개(요청내역, 처리내역, 댓글)를 선언하여 ObjectPage에 마운트합니다.
 
 ```json
 "MainObjectPage": {
@@ -80,6 +80,14 @@ Fiori Elements 표준 List Report V4 템플릿에 커스텀 에디터(Tiptap) �
                 "anchor": "ReqComent"
               },
               "title": "처리내역"
+            },
+            "ReqFeed": {
+              "template": "zsp.itsm.zspfrequest.ext.fragment.FeedNote",
+              "position": {
+                "placement": "After",
+                "anchor": "ProComent"
+              },
+              "title": "댓글"
             }
           }
         }
@@ -89,7 +97,7 @@ Fiori Elements 표준 List Report V4 템플릿에 커스텀 에디터(Tiptap) �
 }
 ```
 
-#### 2) ReqComent.fragment.xml / ProComent.fragment.xml — UI 컴포넌트 구성
+#### 2) ReqComent.fragment.xml / ProComent.fragment.xml — Rich Text Editor UI 구성
 표준 화면에 삽입될 커스텀 에디터 영역입니다. TinyMCE 대신 `TiptapEditor` 커스텀 UI5 컨트롤을 사용하여 OData V4 모델과 양방향(TwoWay) 데이터 바인딩을 수행합니다.
 
 ```xml
@@ -132,20 +140,94 @@ sap.ui.define([
 });
 ```
 
-#### 4) annotation.xml — 진행담당자(Manager) 내비게이션 필터 추가
-OData V4 환경에서 Header 엔티티 리스트를 조회할 때, 1:N 관계인 자식 엔티티(진행담당자)의 필드로 필터링하기 위해 `@UI.SelectionFields` 어노테이션에 `_Promanager/Manager` 경로를 직접 명시했습니다. 이 방식은 백엔드에서 `EXISTS` 서브쿼리로 자동 변환되어 헤더 데이터의 중복 조회를 방지합니다.
+#### 4) FeedNote.fragment.xml & FeedNote.js — 댓글(ReqFeed) 피드 및 멘션 링크
+ObjectPage 내 댓글 섹션으로, OData V4 Composition 자식 엔티티 `_ReqFeed`와 연동되는 소통 피드 컴포넌트입니다.
+
+* **화면 구성 (`FeedNote.fragment.xml`)**:
+  - `sap.m.FeedInput`: 수정 모드(`{ui>/isEditable}`)에 따라 활성화/비활성화 제어.
+  - `sap.m.List` & `sap.m.FeedListItem`: 최신순(`FeedNum` 내림차순) 정렬, 등록자, 등록일시, 본문 바인딩 및 삭제 액션(`FeedListItemAction`) 제공.
+* **로직 및 멘션 링크 (`FeedNote.js` & `ObjectPageExt.controller.js`)**:
+  - `onPostFeed`: OData V4 바인딩의 `create` 메서드를 통해 초안(Draft) 상태로 댓글 생성.
+  - `onDeleteFeed`: `MessageBox.confirm` 확인 후 선택된 댓글 컨텍스트의 `delete()` 실행.
+  - **스마트 멘션 기능**: 본문 내 `@홍길동` 및 `#홍길동(변경권한추가)` 패턴을 감지하여 운영담당자 앱(`ZSPF_OPERMANAGER-display`)으로 이동하는 Semantic FLP 링크(`<a>` 태그)로 자동 변환.
+* **스타일 처리 (`editor.css`)**:
+  - 조회(Disabled) 모드에서도 아바타가 흐려지지 않고 명확하게 유지되며, 안내 문구가 스타일링된 상태로 입력이 방지되도록 CSS 확장 적용.
+
+```javascript
+// FeedNote.js — 멘션 변환 예시
+function _processMentions(sText) {
+    // #홍길동 or #홍길동(변경권한추가) -> 담당자 앱 URL 생성
+    sResult = sResult.replace(/#([a-zA-Z0-9가-힣_-]+)(?:\(변경권한추가\))?/g, function (match, sName) {
+        var sUrl = _buildUrl(sName);
+        return '<a href="' + sUrl + '">#' + sName + '(변경권한추가)</a>';
+    });
+    // @홍길동 -> 담당자 앱 URL 생성
+    sResult = sResult.replace(/@([a-zA-Z0-9가-힣_-]+)/g, function (match, sName) {
+        var sUrl = _buildUrl(sName);
+        return '<a href="' + sUrl + '">@' + sName + '</a>';
+    });
+    return sResult;
+}
+```
+
+#### 5) annotation.xml — Selection Fields 및 Side Effects 구성
+
+* **진행담당자(Manager) 내비게이션 필터**:
+  - 1:N 자식 엔티티의 진행담당자를 메인 검색 조건에 포함하기 위해 `@UI.SelectionFields`에 `_Promanager/Manager` 경로를 선언(백엔드 `EXISTS` 서브쿼리 자동 변환).
+* **Side Effects (필드 변경 즉각 동기화)**:
+  - RAP 백엔드의 Determination 로직(`setDefault`, `setManHours`)에 맞춰 사용자가 값을 변경하는 즉시 UI 필드가 재계산/동기화되도록 OData V4 Side Effects를 구성했습니다.
+    - `CustnoChange`: 고객업체코드(`Custno`) 입력 시 고객명, 고객담당자, 기본 요청일, 기본 난이도/우선순위, 공수시간 동시 갱신.
+    - `ReqTypeChange`: 요청유형(`ReqType`) 변경 시 유형 텍스트 및 기준 공수시간(`ManHours`) 갱신.
+    - `ZlevelChange`: 난이도(`Zlevel`) 변경 시 난이도 텍스트 및 기준 공수시간(`ManHours`) 갱신.
 
 ```xml
-<Annotations Target="SAP__self.MainType">
-    <Annotation Term="UI.SelectionFields">
-        <Collection>
-            <PropertyPath>RequestNo</PropertyPath>
-            <PropertyPath>Custno</PropertyPath>
-            <PropertyPath>ReqType</PropertyPath>
-            <PropertyPath>Zstat</PropertyPath>
-            <PropertyPath>ReqDate</PropertyPath>
-            <PropertyPath>_Promanager/Manager</PropertyPath>
-        </Collection>
-    </Annotation>
-</Annotations>
+<Annotation Term="Common.SideEffects" Qualifier="CustnoChange">
+    <Record Type="Common.SideEffectsType">
+        <PropertyValue Property="SourceProperties">
+            <Collection>
+                <PropertyPath>Custno</PropertyPath>
+            </Collection>
+        </PropertyValue>
+        <PropertyValue Property="TargetProperties">
+            <Collection>
+                <PropertyPath>Custname</PropertyPath>
+                <PropertyPath>Persno</PropertyPath>
+                <PropertyPath>Persname</PropertyPath>
+                <PropertyPath>ReqDate</PropertyPath>
+                <PropertyPath>Zlevel</PropertyPath>
+                <PropertyPath>LevelText</PropertyPath>
+                <PropertyPath>Ranks</PropertyPath>
+                <PropertyPath>RankText</PropertyPath>
+                <PropertyPath>ManHours</PropertyPath>
+            </Collection>
+        </PropertyValue>
+    </Record>
+</Annotation>
 ```
+
+#### 6) Cross-App Navigation 필터 정리 및 감사 필드 제한
+
+고객마스터(`zspf_custmaster`) 등 외부 앱에서 Cross-App Navigation(의도된 `Custno` 전달)을 통해 본 앱의 ListReport로 진입할 때, 원치 않는 필터(예: `CreatedBy`, `CreatedAt` 등 공통 감사 필드)가 FilterBar에 유입되어 검색 조건이 왜곡되는 현상을 방지하도록 다계층 보호 로직을 구현했습니다.
+
+* **manifest.json (Inbound 파라미터 제약)**:
+  - 인바운드 네비게이션 시 `Custno`만 선택적 허용하고, 기타 미정의 파라미터는 무시(`additionalParameters: "ignored"`)하도록 선언.
+  - `ListReportController` 확장을 등록:
+  ```json
+  "sap.ui5": {
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "zsp.itsm.zspfrequest.ext.controller.ListReportExt"
+          }
+        }
+      }
+    }
+  }
+  ```
+* **Component.js (초기 파라미터 필터링)**:
+  - `init` 생명주기에서 `oComponentData.startupParameters`를 가로채어 감사 필드(`CreatedBy`, `CreatedAt`, `LastChangedBy` 등)를 선제 삭제.
+* **ListReportExt.controller.js (동적 외부 상태 정제)**:
+  - `sap-xapp-state` 진입 시 `sap/ui/mdc/p13n/StateUtil`을 사용하여 FilterBar의 상태를 조회한 뒤, 화이트리스트(`Custno`, FE 내부 `$editState`)에 속하지 않는 필터 조건을 `filtered: false, visible: false`로 동적 제거(Delta 처리)하고 자동 검색(`triggerSearch`)을 수행.
+* **annotation.xml (필터 불허 어노테이션)**:
+  - `UI.HiddenFilter` 및 `Capabilities.FilterRestrictions`의 `NonFilterableProperties`를 선언하여 시스템 필드가 스마트 필터 바에 검색 조건으로 활성화되지 않도록 원천 차단.

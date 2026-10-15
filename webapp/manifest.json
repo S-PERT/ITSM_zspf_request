@@ -43,8 +43,12 @@
           "title": "{{ZSPF_REQUEST-display.flpTitle}}",
           "subTitle": "{{ZSPF_REQUEST-display.flpSubtitle}}",
           "signature": {
-            "parameters": {},
-            "additionalParameters": "allowed"
+            "parameters": {
+              "Custno": {
+                "required": false
+              }
+            },
+            "additionalParameters": "ignored"
           }
         }
       }
@@ -67,6 +71,15 @@
     }
   },
   "sap.ui5": {
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "zsp.itsm.zspfrequest.ext.controller.ListReportExt"
+          }
+        }
+      }
+    },
     "flexEnabled": false,
     "dependencies": {
       "minUI5Version": "1.152.0",
@@ -181,6 +194,14 @@
                         "anchor": "ReqComent"
                       },
                       "title": "처리내역"
+                    },
+                    "ReqFeed": {
+                      "template": "zsp.itsm.zspfrequest.ext.fragment.FeedNote",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "ProComent"
+                      },
+                      "title": "댓글"
                     }
                   }
                 }

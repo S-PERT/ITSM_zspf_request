@@ -1,0 +1,39 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    core:require="{ handler: 'zsp/itsm/zspfrequest/ext/fragment/FeedNote' }">
+    
+    <VBox id="idFeedContainer" class="sapUiContentPadding" core:require="{ handler: 'zsp/itsm/zspfrequest/ext/fragment/FeedNote' }">
+        <FeedInput
+            id="idFeedInput"
+            post="handler.onPostFeed"
+            placeholder="여기에 기록하십시오(댓글언급:@홍길동 ,수정권한부여 #홍길동)"
+            enabled="{ui>/isEditable}"
+            class="sapUiTinyMarginBottom" />
+        <List
+            id="idFeedList"
+            showSeparators="Inner"
+            noDataText="데이터 없음"
+            items="{
+                path: '_ReqFeed',
+                sorter: { path: 'FeedNum', descending: true }
+            }">
+            <FeedListItem
+                sender="{CreatedBy}"
+                icon="sap-icon://person-placeholder"
+                timestamp="{CreatedAt}"
+                text="{Content}"
+                convertLinksToAnchorTags="All">
+                <actions>
+                    <FeedListItemAction
+                        core:require="{ handler: 'zsp/itsm/zspfrequest/ext/fragment/FeedNote' }"
+                        text="Delete"
+                        icon="sap-icon://delete"
+                        press="handler.onDeleteFeed"
+                        visible="{ui>/isEditable}" />
+                </actions>
+            </FeedListItem>
+        </List>
+    </VBox>
+
+</core:FragmentDefinition>
