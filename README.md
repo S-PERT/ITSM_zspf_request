@@ -240,3 +240,14 @@ function _processMentions(sText) {
   - `changeRealDate` 팝업 파라미터 엔티티 `ZSP_ITSM_A_REALDATE`에 `@UI.defaultValue: #( 'ELEMENT_OF_REFERENCED_ENTITY: RealDate' )` 어노테이션을 부여하여, Fiori Elements 표준 다이얼로그가 열릴 때 해당 행의 기존 완료일(`RealDate`)이 기본값으로 자동 바인딩되도록 구성했습니다.
   - 인스턴스 Feature Control을 통해 진행상태가 완료(`'S'`)인 건에 대해서만 액션 버튼이 활성화됩니다.
 
+#### 8) 진행담당자(_Promanager/Manager) 필터바 설정 및 헤더 중복 방지
+
+* **헤더 데이터 중복(Duplicate Rows) 원천 차단**:
+  - 1:N 관계인 진행담당자(`zsp_itsm_0041`)를 루트 CDS 뷰(`ZSP_ITSM_R_REQUEST`)에 직접 조인하여 헤더 필드로 노출하던 이전 방식은 담당자가 복수인 요청 건에서 헤더 레코드가 N개로 증식되는 문제가 있었습니다.
+  - 헤더 뷰의 1:N 직접 조인 필드를 제거하고, 순수 Composition 네비게이션(`_Promanager`)으로만 관계를 유지하도록 백엔드(CTS: `SPDK903932`)를 정비했습니다.
+* **UI5 FilterBar 네비게이션 필터 구성**:
+  - `annotation.xml`: `UI.SelectionFields` 컬렉션에 `<PropertyPath>_Promanager/Manager</PropertyPath>`를 정의하여 네비게이션 필터링 지원.
+  - `manifest.json`: `MainList`의 `controlConfiguration`에 `@com.sap.vocabularies.UI.v1.SelectionFields` 설정을 추가하고, `_Promanager/Manager`의 `availability`를 `"Default"`로 지정하여 별도 Adapt Filters 조작 없이도 필터바에 즉시 노출되도록 구성.
+* **OData V4 Lambda 필터링 동작**:
+  - UI5 필터바에서 진행담당자를 지정하면 OData V4 `$filter=_Promanager/any(d:d/Manager eq '...')` 요청이 발생하며, SAP Gateway/RAP 엔진이 이를 `EXISTS` 서브쿼리로 처리하므로 헤더 건수의 왜곡 및 중복 행 없이 해당 담당자가 포함된 요청만 정확하게 조회됩니다.
+

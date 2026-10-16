@@ -158,6 +158,14 @@
                   "tableSettings": {
                     "type": "GridTable"
                   }
+                },
+                "@com.sap.vocabularies.UI.v1.SelectionFields": {
+                  "filterFields": {
+                    "_Promanager/Manager": {
+                      "label": "{i18n>managerFilterLabel}",
+                      "availability": "Default"
+                    }
+                  }
                 }
               }
             }
