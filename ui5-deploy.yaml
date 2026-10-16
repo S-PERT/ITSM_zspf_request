@@ -24,7 +24,7 @@ builder:
           name: ZSPF_REQUEST
           description: 고객업체 요청관리
           package: ZSP_ITSM_REQUEST
-          transport: SPDK903810
+          transport: SPDK903932
         exclude:
           - /test/
           - /localService/
