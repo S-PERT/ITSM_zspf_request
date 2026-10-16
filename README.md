@@ -172,10 +172,10 @@ function _processMentions(sText) {
 
 #### 5) Selection Fields 및 Side Effects 구성
 
-* **진행담당자(ProManager) 표준 헤더 필터 및 Value Help 연동**:
-  - `SolutionFlag`와 동일하게 헤더 FilterBar의 표준 선택 필드로 동작하도록 `ProManager`를 CDS 뷰(`ZSP_ITSM_R_REQUEST`, `zsp_itsm_p_request`) 및 MDE에 `@UI.selectionField: [{ position: 60 }]`로 노출.
-  - Value Help로 `ZSP_ITSM_V_OPERMANAGER`(`Manager`)를 지정하고, `@ObjectModel.text.element: [ 'Mngname' ]`을 통해 담당자명이 자동 매핑되도록 구성.
-  - UI5 로컬 어노테이션(`annotation.xml`)의 `UI.SelectionFields` 컬렉션에도 명시하여 클라이언트/서버 일관성 확보.
+* **진행담당자(ProManager) 헤더 중복 해결 및 Navigation Path 필터링 (`_Promanager/Manager`)**:
+  - 헤더 FilterBar 조회를 위해 `ZSP_ITSM_R_REQUEST`에 1:N 자식 테이블(`zsp_itsm_0041`)을 직접 조인했던 결함으로 인해 동일한 요청이 여러 행으로 중복 출력되던 문제를 해결했습니다.
+  - CTS `SPDK903932`를 통해 CDS 루트 뷰(`ZSP_ITSM_R_REQUEST`), 프로젝션 뷰(`zsp_itsm_p_request`), MDE에서 잘못 투영되었던 `ProManager` 필드 및 `_ProgMng` 조인을 완전히 제거하여 루트 엔티티의 1건당 1행 유일성을 정상 복원했습니다.
+  - Fiori Elements 상단 FilterBar에서의 진행담당자 검색은 `zspf_custmaster`와 동일한 정석 방식으로, 로컬 어노테이션(`annotation.xml`)의 `UI.SelectionFields`에 자식 엔티티 내비게이션 경로인 `<PropertyPath>_Promanager/Manager</PropertyPath>`를 정의하여 데이터 복제 없이 담당자별 필터 조회가 정상 동작하도록 최적화했습니다.
 
 * **Side Effects (필드 변경 즉각 동기화)**:
   - RAP 백엔드의 Determination 로직(`setDefault`, `setManHours`)에 맞춰 사용자가 값을 변경하는 즉시 UI 필드가 재계산/동기화되도록 OData V4 Side Effects를 구성했습니다.

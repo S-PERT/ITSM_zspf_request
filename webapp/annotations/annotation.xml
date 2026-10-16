@@ -21,7 +21,7 @@
                         <PropertyPath>SolutionFlag</PropertyPath>
                         <PropertyPath>Zstat</PropertyPath>
                         <PropertyPath>ReqDate</PropertyPath>
-                        <PropertyPath>ProManager</PropertyPath>
+                        <PropertyPath>_Promanager/Manager</PropertyPath>
                     </Collection>
                 </Annotation>
                 <Annotation Term="Common.SideEffects" Qualifier="CustnoChange">
