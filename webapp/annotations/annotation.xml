@@ -8,9 +8,6 @@
     <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/Communication.xml">
         <edmx:Include Namespace="com.sap.vocabularies.Communication.v1" Alias="Communication"/>
     </edmx:Reference>
-    <edmx:Reference Uri="https://sap.github.io/odata-vocabularies/vocabularies/Capabilities.xml">
-        <edmx:Include Namespace="Org.OData.Capabilities.V1" Alias="Capabilities"/>
-    </edmx:Reference>
     <edmx:Reference Uri="/sap/opu/odata4/sap/zsp_itsm_p_request_ui_v4/srvd/sap/zsp_itsm_p_request_ui/0001/$metadata">
         <edmx:Include Namespace="com.sap.gateway.srvd.zsp_itsm_p_request_ui.v0001" Alias="SAP__self"/>
     </edmx:Reference>
@@ -19,12 +16,12 @@
             <Annotations Target="SAP__self.MainType">
                 <Annotation Term="UI.SelectionFields">
                     <Collection>
-                        <PropertyPath>RequestNo</PropertyPath>
                         <PropertyPath>Custno</PropertyPath>
                         <PropertyPath>ReqType</PropertyPath>
+                        <PropertyPath>SolutionFlag</PropertyPath>
                         <PropertyPath>Zstat</PropertyPath>
                         <PropertyPath>ReqDate</PropertyPath>
-                        <PropertyPath>_Promanager/Manager</PropertyPath>
+                        <PropertyPath>ProManager</PropertyPath>
                     </Collection>
                 </Annotation>
                 <Annotation Term="Common.SideEffects" Qualifier="CustnoChange">
@@ -45,6 +42,11 @@
                                 <PropertyPath>Ranks</PropertyPath>
                                 <PropertyPath>RankText</PropertyPath>
                                 <PropertyPath>ManHours</PropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                        <PropertyValue Property="TargetEntities">
+                            <Collection>
+                                <NavigationPropertyPath>_Promanager</NavigationPropertyPath>
                             </Collection>
                         </PropertyValue>
                     </Record>
@@ -79,32 +81,45 @@
                         </PropertyValue>
                     </Record>
                 </Annotation>
-            </Annotations>
-            <Annotations Target="SAP__self.MainType/CreatedBy">
-                <Annotation Term="UI.HiddenFilter" Bool="true"/>
-            </Annotations>
-            <Annotations Target="SAP__self.MainType/CreatedAt">
-                <Annotation Term="UI.HiddenFilter" Bool="true"/>
-            </Annotations>
-            <Annotations Target="SAP__self.MainType/LastChangedBy">
-                <Annotation Term="UI.HiddenFilter" Bool="true"/>
-            </Annotations>
-            <Annotations Target="SAP__self.MainType/LastChangedAt">
-                <Annotation Term="UI.HiddenFilter" Bool="true"/>
-            </Annotations>
-            <Annotations Target="SAP__self.MainType/LocalLastChangedAt">
-                <Annotation Term="UI.HiddenFilter" Bool="true"/>
-            </Annotations>
-            <Annotations Target="SAP__self.Container/Main">
-                <Annotation Term="Capabilities.FilterRestrictions">
-                    <Record>
-                        <PropertyValue Property="NonFilterableProperties">
+                <Annotation Term="Common.SideEffects" Qualifier="AttachmentChange">
+                    <Record Type="Common.SideEffectsType">
+                        <PropertyValue Property="SourceEntities">
                             <Collection>
+                                <NavigationPropertyPath>_Attachment</NavigationPropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                        <PropertyValue Property="TargetEntities">
+                            <Collection>
+                                <NavigationPropertyPath>_Attachment</NavigationPropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                    </Record>
+                </Annotation>
+            </Annotations>
+            <Annotations Target="SAP__self.AttachmentType">
+                <Annotation Term="Common.SideEffects" Qualifier="AttachmentUpload">
+                    <Record Type="Common.SideEffectsType">
+                        <PropertyValue Property="SourceProperties">
+                            <Collection>
+                                <PropertyPath>Attachment</PropertyPath>
+                                <PropertyPath>FileName</PropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                        <PropertyValue Property="TargetProperties">
+                            <Collection>
+                                <PropertyPath>Attachment</PropertyPath>
+                                <PropertyPath>FileName</PropertyPath>
+                                <PropertyPath>MimeType</PropertyPath>
                                 <PropertyPath>CreatedBy</PropertyPath>
                                 <PropertyPath>CreatedAt</PropertyPath>
                                 <PropertyPath>LastChangedBy</PropertyPath>
                                 <PropertyPath>LastChangedAt</PropertyPath>
                                 <PropertyPath>LocalLastChangedAt</PropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                        <PropertyValue Property="TargetEntities">
+                            <Collection>
+                                <NavigationPropertyPath></NavigationPropertyPath>
                             </Collection>
                         </PropertyValue>
                     </Record>

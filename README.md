@@ -170,15 +170,19 @@ function _processMentions(sText) {
 }
 ```
 
-#### 5) annotation.xml — Selection Fields 및 Side Effects 구성
+#### 5) Selection Fields 및 Side Effects 구성
 
-* **진행담당자(Manager) 내비게이션 필터**:
-  - 1:N 자식 엔티티의 진행담당자를 메인 검색 조건에 포함하기 위해 `@UI.SelectionFields`에 `_Promanager/Manager` 경로를 선언(백엔드 `EXISTS` 서브쿼리 자동 변환).
+* **진행담당자(ProManager) 표준 헤더 필터 및 Value Help 연동**:
+  - `SolutionFlag`와 동일하게 헤더 FilterBar의 표준 선택 필드로 동작하도록 `ProManager`를 CDS 뷰(`ZSP_ITSM_R_REQUEST`, `zsp_itsm_p_request`) 및 MDE에 `@UI.selectionField: [{ position: 60 }]`로 노출.
+  - Value Help로 `ZSP_ITSM_V_OPERMANAGER`(`Manager`)를 지정하고, `@ObjectModel.text.element: [ 'Mngname' ]`을 통해 담당자명이 자동 매핑되도록 구성.
+  - UI5 로컬 어노테이션(`annotation.xml`)의 `UI.SelectionFields` 컬렉션에도 명시하여 클라이언트/서버 일관성 확보.
+
 * **Side Effects (필드 변경 즉각 동기화)**:
   - RAP 백엔드의 Determination 로직(`setDefault`, `setManHours`)에 맞춰 사용자가 값을 변경하는 즉시 UI 필드가 재계산/동기화되도록 OData V4 Side Effects를 구성했습니다.
     - `CustnoChange`: 고객업체코드(`Custno`) 입력 시 고객명, 고객담당자, 기본 요청일, 기본 난이도/우선순위, 공수시간 동시 갱신.
     - `ReqTypeChange`: 요청유형(`ReqType`) 변경 시 유형 텍스트 및 기준 공수시간(`ManHours`) 갱신.
     - `ZlevelChange`: 난이도(`Zlevel`) 변경 시 난이도 텍스트 및 기준 공수시간(`ManHours`) 갱신.
+    - `AttachmentChange`: 첨부파일 추가/삭제 시 첨부파일 테이블 상태 갱신.
 
 ```xml
 <Annotation Term="Common.SideEffects" Qualifier="CustnoChange">
@@ -229,5 +233,10 @@ function _processMentions(sText) {
   - `init` 생명주기에서 `oComponentData.startupParameters`를 가로채어 감사 필드(`CreatedBy`, `CreatedAt`, `LastChangedBy` 등)를 선제 삭제.
 * **ListReportExt.controller.js (동적 외부 상태 정제)**:
   - `sap-xapp-state` 진입 시 `sap/ui/mdc/p13n/StateUtil`을 사용하여 FilterBar의 상태를 조회한 뒤, 화이트리스트(`Custno`, FE 내부 `$editState`)에 속하지 않는 필터 조건을 `filtered: false, visible: false`로 동적 제거(Delta 처리)하고 자동 검색(`triggerSearch`)을 수행.
-* **annotation.xml (필터 불허 어노테이션)**:
-  - `UI.HiddenFilter` 및 `Capabilities.FilterRestrictions`의 `NonFilterableProperties`를 선언하여 시스템 필드가 스마트 필터 바에 검색 조건으로 활성화되지 않도록 원천 차단.
+
+#### 7) 완료일변경 (changeRealDate) 액션 인스턴스 기본값 바인딩
+
+* **기존 완료일 자동 세팅**:
+  - `changeRealDate` 팝업 파라미터 엔티티 `ZSP_ITSM_A_REALDATE`에 `@UI.defaultValue: #( 'ELEMENT_OF_REFERENCED_ENTITY: RealDate' )` 어노테이션을 부여하여, Fiori Elements 표준 다이얼로그가 열릴 때 해당 행의 기존 완료일(`RealDate`)이 기본값으로 자동 바인딩되도록 구성했습니다.
+  - 인스턴스 Feature Control을 통해 진행상태가 완료(`'S'`)인 건에 대해서만 액션 버튼이 활성화됩니다.
+
