@@ -251,3 +251,107 @@ function _processMentions(sText) {
 * **OData V4 Lambda 필터링 동작**:
   - UI5 필터바에서 진행담당자를 지정하면 OData V4 `$filter=_Promanager/any(d:d/Manager eq '...')` 요청이 발생하며, SAP Gateway/RAP 엔진이 이를 `EXISTS` 서브쿼리로 처리하므로 헤더 건수의 왜곡 및 중복 행 없이 해당 담당자가 포함된 요청만 정확하게 조회됩니다.
 
+<br>
+
+#### 9) CustnoCell (커스텀 컬럼 Fragment) — 고객업체코드 및 요청내역 연동
+
+요청 목록에서 고객사명과 코드를 시각적으로 일목요연하게 표시하기 위해 커스텀 XML Fragment 기반의 테이블 컬럼을 구성했습니다.
+
+* **manifest.json (커스텀 컬럼 등록)**:
+  `controlConfiguration > @com.sap.vocabularies.UI.v1.LineItem > columns`에 `CustnoCell`을 선언했습니다.
+```json
+"columns": {
+  "CustnoCell": {
+    "header": "고객업체",
+    "width": "18rem",
+    "horizontalAlign": "Begin",
+    "position": {
+      "anchor": "DataField::ReqType",
+      "placement": "Before"
+    },
+    "template": "zsp.itsm.zspfrequest.ext.fragment.CustnoCell",
+    "properties": [
+      "Custno",
+      "Custname"
+    ]
+  }
+}
+```
+
+* **CustnoCell.fragment.xml (UI 정의)**:
+  고객업체명(`Custname` 또는 `Custno`) 텍스트와 보조 동작을 지원하는 HBox 레이아웃을 제공합니다.
+```xml
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <HBox alignItems="Center">
+        <Text
+            text="{= ${Custname} || ${Custno} }"
+            wrapping="false"
+            class="sapUiTinyMarginEnd" />
+        <Button
+            icon="sap-icon://request"
+            text="요청내역"
+            type="Transparent"
+            tooltip="고객 요청내역 바로가기"
+            press="handler.onNavigateToRequest"
+            core:require="{ handler: 'zsp/itsm/zspfrequest/ext/controller/CustnoCellHandler' }" />
+    </HBox>
+</core:FragmentDefinition>
+```
+
+<br>
+
+#### 10) ListReportExt.controller.js — GridTable 라인(행) 클릭 시 Object Page 자동 진입 네비게이션
+
+요청 목록의 수많은 컬럼을 원활하게 열람할 수 있도록 하단 가로 스크롤바와 컬럼 폭 고정을 제공하는 `GridTable` 설정을 유지하면서, 목록의 **행(라인)이나 셀을 클릭했을 때 바로 요청 상세(Object Page)로 진입**할 수 있도록 컨트롤러 확장 이벤트를 구현했습니다.
+
+* **작동 원리 및 세부 제어**:
+  - `ListReportExt.controller.js`의 `onAfterRendering` 생명주기에서 `sap.ui.mdc.Table` 초기화(`initialized()`) 시 내부 `sap.ui.table.Table` 인스턴스에 `cellClick` 리스너를 등록합니다.
+  - **체크박스 열 제외**: 행 삭제/일괄 처리를 위해 좌측 체크박스 열(`columnIndex < 0`)을 누를 때는 상세 페이지로 이동하지 않고 순수 체크박스 선택만 유지되도록 보호했습니다.
+  - **내부 액션 버튼 보호**: 셀 안의 `[요청내역]` 버튼이나 링크(`.sapMBtn`, `.sapMLnk` 등)를 누를 때는 해당 버튼 고유의 기능만 실행되고 상세 페이지로 이동하지 않도록 이벤트 타겟 필터링을 적용했습니다.
+  - 셀 클릭 시 해당 행의 `rowBindingContext`를 추출하여 Fiori Elements 표준 `routing.navigate(oContext)`를 호출합니다.
+
+```javascript
+// ListReportExt.controller.js — GridTable 행 클릭 네비게이션 연동
+function attachGridRowNavigation(oController) {
+    var oView = oController.base.getView();
+    var oExtensionAPI = oController.base.getExtensionAPI();
+    if (!oView || !oExtensionAPI || !oExtensionAPI.routing) return;
+
+    function doAttach(oInnerTable) {
+        if (!oInnerTable || oInnerTable._bRowNavAttached) return;
+        oInnerTable._bRowNavAttached = true;
+
+        oInnerTable.attachCellClick(function (oEvent) {
+            var iColIndex = oEvent.getParameter("columnIndex");
+            if (iColIndex === undefined || iColIndex === null || iColIndex < 0) return; // 체크박스 제외
+
+            var oDomEvent = window.event;
+            var oTarget = (oDomEvent && oDomEvent.target) || null;
+            if (oTarget && (oTarget.closest("button") || oTarget.closest(".sapMBtn") || oTarget.closest(".sapMLnk"))) return;
+
+            var oContext = oEvent.getParameter("rowBindingContext");
+            if (oContext) {
+                oExtensionAPI.routing.navigate(oContext);
+            }
+        });
+    }
+
+    var aTables = oView.findAggregatedObjects(true, function (o) { return o && o.isA && o.isA("sap.ui.table.Table"); });
+    if (aTables && aTables.length) aTables.forEach(doAttach);
+
+    var aMdcTables = oView.findAggregatedObjects(true, function (o) { return o && o.isA && o.isA("sap.ui.mdc.Table"); });
+    if (aMdcTables && aMdcTables.length) {
+        aMdcTables.forEach(function (oMdc) {
+            if (oMdc.initialized) {
+                oMdc.initialized().then(function () {
+                    var oInner = oMdc.getAggregation("_content") || (typeof oMdc._getTable === "function" && oMdc._getTable());
+                    if (oInner && oInner.isA && oInner.isA("sap.ui.table.Table")) doAttach(oInner);
+                });
+            }
+        });
+    }
+}
+```
+

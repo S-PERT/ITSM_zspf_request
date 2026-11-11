@@ -51,6 +51,16 @@
             "additionalParameters": "ignored"
           }
         }
+      },
+      "outbounds": {
+        "toCustmaster": {
+          "semanticObject": "ZSPF_CUSTMASTER",
+          "action": "display",
+          "parameters": {
+            "Custno": {}
+          },
+          "additionalParameters": "ignored"
+        }
       }
     }
   },
@@ -157,6 +167,22 @@
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
                     "type": "GridTable"
+                  },
+                  "columns": {
+                    "CustnoCell": {
+                      "header": "고객업체",
+                      "width": "18rem",
+                      "horizontalAlign": "Begin",
+                      "position": {
+                        "anchor": "DataField::ReqType",
+                        "placement": "Before"
+                      },
+                      "template": "zsp.itsm.zspfrequest.ext.fragment.CustnoCell",
+                      "properties": [
+                        "Custno",
+                        "Custname"
+                      ]
+                    }
                   }
                 }
               }
