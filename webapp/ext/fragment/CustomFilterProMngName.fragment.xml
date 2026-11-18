@@ -1,0 +1,15 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Input
+        id="CustomFilterProMngNameInput"
+        core:require="{ handler: 'zsp/itsm/zspfrequest/ext/controller/ListReportExt' }"
+        value="{
+            path: 'filterValues>',
+            type: 'sap.fe.macros.filter.type.Value',
+            formatOptions: {
+                operator: 'zsp.itsm.zspfrequest.ext.controller.ListReportExt.filterProMngName'
+            }
+        }"
+        submit="handler.onFilterSubmit" />
+</core:FragmentDefinition>

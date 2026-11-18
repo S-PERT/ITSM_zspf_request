@@ -164,6 +164,19 @@
                 }
               },
               "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.SelectionFields": {
+                  "filterFields": {
+                    "CustomFilterProMngName": {
+                      "label": "{i18n>filterProMngName}",
+                      "template": "zsp.itsm.zspfrequest.ext.fragment.CustomFilterProMngName",
+                      "availability": "Default",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "_Promanager/Manager"
+                      }
+                    }
+                  }
+                },
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
                     "type": "GridTable"
@@ -245,6 +258,15 @@
   "sap.fe": {
     "app": {
       "enableLazyLoading": true
+    },
+    "macros": {
+      "filter": {
+        "customFilterOperators": [
+          {
+            "name": "zsp.itsm.zspfrequest.ext.controller.ListReportExt.filterProMngName"
+          }
+        ]
+      }
     }
   }
 }
