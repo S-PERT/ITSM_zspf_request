@@ -3,9 +3,12 @@ sap.ui.define([
     "sap/ui/core/mvc/ControllerExtension",
     "sap/ui/mdc/p13n/StateUtil",
     "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator"
-], function (ControllerExtension, StateUtil, Filter, FilterOperator) {
+    "sap/ui/model/FilterOperator",
+    "zsp/itsm/zspfrequest/ext/controller/ListReportExt"
+], function (ControllerExtension, StateUtil, Filter, FilterOperator, FilterHandler) {
     "use strict";
+
+    var sOperatorName = FilterHandler.OPERATOR_NAME;
 
     // 외부 앱(Cross-App Navigation)에서 진입 시 유지할 필터 (화이트리스트)
     var aAllowedFilters = ["Custno", "CustomFilterProMngName"];
@@ -124,6 +127,13 @@ sap.ui.define([
         }
     }
 
+    function addCandidate(aList, sVal) {
+        var sClean = (sVal || "").replace(/\s+/g, "");
+        if (sClean && aList.indexOf(sClean) === -1) {
+            aList.push(sClean);
+        }
+    }
+
     function getLogonUserCandidates() {
         if (!window.sap || !sap.ushell || !sap.ushell.Container || typeof sap.ushell.Container.getServiceAsync !== "function") {
             return Promise.resolve([]);
@@ -137,35 +147,19 @@ sap.ui.define([
             var sFull = (typeof oUserInfo.getFullName === "function" && oUserInfo.getFullName()) || "";
 
             var aCandidates = [];
-            // 1. 성 + 이름 (한국어 표준: "권" + "순호" -> "권순호")
             if (sLast && sFirst) {
-                var sLastFirst = (sLast + sFirst).replace(/\s+/g, "");
-                if (sLastFirst && aCandidates.indexOf(sLastFirst) === -1) {
-                    aCandidates.push(sLastFirst);
-                }
+                addCandidate(aCandidates, sLast + sFirst);
             }
-            // 2. FullName 공백 제거 (예: "순호 권" -> "순호권" 또는 "권 순호" -> "권순호")
             if (sFull) {
+                addCandidate(aCandidates, sFull);
                 var sCleanFull = sFull.replace(/\s+/g, "");
-                if (sCleanFull && aCandidates.indexOf(sCleanFull) === -1) {
-                    aCandidates.push(sCleanFull);
-                }
-                // 3글자 한국 이름 순서 반전 대비 ("순호권" -> "권순호")
                 if (sCleanFull.length === 3) {
-                    var sReversed = sCleanFull.charAt(2) + sCleanFull.substring(0, 2);
-                    if (sReversed && aCandidates.indexOf(sReversed) === -1) {
-                        aCandidates.push(sReversed);
-                    }
+                    addCandidate(aCandidates, sCleanFull.charAt(2) + sCleanFull.substring(0, 2));
                 }
             }
-            // 3. 이름 + 성 ("순호" + "권" -> "순호권")
             if (sFirst && sLast) {
-                var sFirstLast = (sFirst + sLast).replace(/\s+/g, "");
-                if (sFirstLast && aCandidates.indexOf(sFirstLast) === -1) {
-                    aCandidates.push(sFirstLast);
-                }
+                addCandidate(aCandidates, sFirst + sLast);
             }
-
             return aCandidates;
         }).catch(function (err) {
             // eslint-disable-next-line no-console
@@ -231,24 +225,38 @@ sap.ui.define([
         override: {
             onInit: function () {
                 this._bCleaned = false;
-                this._bDefaultFilterInitialized = false;
+                this._bDefaultFilterApplied = false;
+                this._pMatchedManagerName = null;
+                this._sDefaultManagerName = null;
+                this._hookViewStateSelectionVariant();
             },
             viewState: {
                 onBeforeStateApplied: function (aPromises) {
-                    var that = this;
-                    if (!that._bDefaultFilterInitialized) {
-                        var oPromise = that._initDefaultManagerFilter();
+                    this._hookViewStateSelectionVariant();
+                    if (!this._pMatchedManagerName) {
+                        this._pMatchedManagerName = this._resolveDefaultManagerName();
                         if (aPromises && Array.isArray(aPromises)) {
-                            aPromises.push(oPromise);
+                            aPromises.push(this._pMatchedManagerName);
                         }
                     }
                 },
-                onAfterStateApplied: function () {
+                onAfterStateApplied: function (aPromises) {
+                    var that = this;
                     this._cleanup();
-                    if (!this._bDefaultFilterInitialized) {
-                        this._initDefaultManagerFilter();
-                    }
-                    if (this._sDefaultManagerName) {
+                    if (!this._bDefaultFilterApplied) {
+                        var oFallbackPromise = this._applyDefaultFilterBeforeSearch().then(function (bApplied) {
+                            if (bApplied) {
+                                var oFilterBar = findFilterBar(that.base.getView());
+                                if (oFilterBar && typeof oFilterBar.triggerSearch === "function") {
+                                    return oFilterBar.triggerSearch();
+                                }
+                            }
+                            return null;
+                        });
+                        if (aPromises && Array.isArray(aPromises)) {
+                            aPromises.push(oFallbackPromise);
+                        }
+                    } else if (this._sDefaultManagerName) {
                         setCustomFilterInputValue(this.base.getView(), this._sDefaultManagerName);
                     }
                 }
@@ -263,99 +271,117 @@ sap.ui.define([
                 if (that._sDefaultManagerName) {
                     setCustomFilterInputValue(that.base.getView(), that._sDefaultManagerName);
                 }
-
-                // onAfterStateApplied 가 호출되지 않는 버전 대비
-                setTimeout(function () {
-                    that._cleanup();
-                    if (!that._bDefaultFilterInitialized) {
-                        that._initDefaultManagerFilter();
-                    }
-                    if (that._sDefaultManagerName) {
-                        setCustomFilterInputValue(that.base.getView(), that._sDefaultManagerName);
-                    }
-                }, 300);
             }
         },
 
-        _applyDefaultManagerFilter: function (sMatchedName) {
+        _hookViewStateSelectionVariant: function () {
             var that = this;
-            if (!sMatchedName) {
+            var oViewState = that.base && that.base.viewState;
+            if (!oViewState || oViewState._bCustomDefaultHooked || typeof oViewState._applySelectionVariant !== "function") {
                 return;
             }
-            that._sDefaultManagerName = sMatchedName;
+            oViewState._bCustomDefaultHooked = true;
+            var fnOrigApplySV = oViewState._applySelectionVariant;
+            oViewState._applySelectionVariant = function () {
+                var aArgs = arguments;
+                return Promise.resolve(fnOrigApplySV.apply(this, aArgs)).then(function (vResult) {
+                    return that._applyDefaultFilterBeforeSearch().then(function () {
+                        return vResult;
+                    });
+                });
+            };
+        },
+
+        _resolveDefaultManagerName: function () {
+            var that = this;
+            return getLogonUserCandidates().then(function (aCandidates) {
+                if (!aCandidates || !aCandidates.length) {
+                    return null;
+                }
+                var oView = that.base.getView();
+                var oModel = oView.getModel() || (that.base.getAppComponent && that.base.getAppComponent().getModel());
+                if (!oModel || typeof oModel.bindList !== "function") {
+                    // eslint-disable-next-line no-console
+                    console.warn("ListReportExt: ODataModel not ready for OperManager check.");
+                    return null;
+                }
+                return verifyOperManager(oModel, aCandidates);
+            }).catch(function (err) {
+                // eslint-disable-next-line no-console
+                console.warn("ListReportExt: Error resolving default manager name:", err);
+                return null;
+            });
+        },
+
+        _applyDefaultFilterBeforeSearch: function () {
+            var that = this;
+            if (that._bDefaultFilterApplied) {
+                return Promise.resolve(false);
+            }
+            that._bDefaultFilterApplied = true;
 
             var oView = that.base.getView();
             var oFilterBar = findFilterBar(oView);
             var oExtensionAPI = that.base.getExtensionAPI();
 
-            if (oExtensionAPI && typeof oExtensionAPI.setFilterValues === "function") {
-                try {
-                    oExtensionAPI.setFilterValues("CustomFilterProMngName", "EQ", sMatchedName);
-                } catch (err1) {
-                    try {
-                        oExtensionAPI.setFilterValues("CustomFilterProMngName", sMatchedName);
-                    } catch (err2) {
-                        // eslint-disable-next-line no-console
-                        console.warn("ListReportExt: setFilterValues failed:", err1, err2);
-                    }
-                }
+            var pCleanup = Promise.resolve();
+            if (!that._bCleaned && isCrossAppNavigation() && oFilterBar) {
+                that._bCleaned = true;
+                pCleanup = restrictFilterBar(oFilterBar).catch(function () {
+                    return false;
+                });
             }
 
-            if (oFilterBar) {
-                StateUtil.applyExternalState(oFilterBar, {
-                    filter: {
-                        CustomFilterProMngName: [
-                            { operator: "EQ", values: [sMatchedName] }
-                        ]
-                    }
-                }).catch(function () {});
-            }
+            var pMatched = that._pMatchedManagerName || that._resolveDefaultManagerName();
 
-            setCustomFilterInputValue(oView, sMatchedName);
-        },
-
-        _initDefaultManagerFilter: function () {
-            var that = this;
-            if (that._bDefaultFilterInitialized) {
-                return Promise.resolve();
-            }
-            that._bDefaultFilterInitialized = true;
-
-            return getLogonUserCandidates().then(function (aCandidates) {
-                if (!aCandidates || !aCandidates.length) {
-                    return null;
+            return Promise.all([pCleanup, pMatched]).then(function (aResults) {
+                var sMatchedName = aResults[1];
+                if (!sMatchedName || !oFilterBar) {
+                    return false;
                 }
 
-                var oView = that.base.getView();
-                var oFilterBar = findFilterBar(oView);
+                // 사용자가 저장한 변형(Variant)이 적용된 경우 기본값으로 덮어쓰지 않음
+                var oVM = oView.byId("fe::PageVariantManagement");
+                if (oVM && typeof oVM.getCurrentVariantKey === "function" && typeof oVM.getStandardVariantKey === "function") {
+                    var sCurrentKey = oVM.getCurrentVariantKey();
+                    var sStandardKey = oVM.getStandardVariantKey();
+                    if (sCurrentKey && sStandardKey && sCurrentKey !== sStandardKey) {
+                        return false;
+                    }
+                }
 
-                var pState = oFilterBar ? StateUtil.retrieveExternalState(oFilterBar) : Promise.resolve(null);
-                return pState.then(function (oState) {
+                return StateUtil.retrieveExternalState(oFilterBar).then(function (oState) {
                     var mFilter = (oState && oState.filter) || {};
                     var aExisting = mFilter.CustomFilterProMngName;
                     if (aExisting && aExisting.length > 0) {
-                        // 저장된 변형이나 URL 파라미터로 이미 필터 값이 있음 -> 기본값 덮어쓰지 않음
-                        return null;
+                        // URL 파라미터나 변형으로 이미 필터 값이 들어온 경우 덮어쓰지 않음
+                        return false;
                     }
 
-                    var oModel = oView.getModel() || (that.base.getAppComponent && that.base.getAppComponent().getModel());
-                    if (!oModel || typeof oModel.bindList !== "function") {
-                        // eslint-disable-next-line no-console
-                        console.warn("ListReportExt: ODataModel not ready for OperManager check.");
-                        return null;
+                    that._sDefaultManagerName = sMatchedName;
+
+                    var pSetFilter;
+                    if (oExtensionAPI && typeof oExtensionAPI.setFilterValues === "function") {
+                        pSetFilter = oExtensionAPI.setFilterValues("CustomFilterProMngName", sOperatorName, sMatchedName);
+                    } else {
+                        pSetFilter = StateUtil.applyExternalState(oFilterBar, {
+                            filter: {
+                                CustomFilterProMngName: [
+                                    { operator: sOperatorName, values: [sMatchedName] }
+                                ]
+                            }
+                        });
                     }
 
-                    return verifyOperManager(oModel, aCandidates).then(function (sMatchedName) {
-                        if (sMatchedName) {
-                            that._applyDefaultManagerFilter(sMatchedName);
-                        }
-                        return null;
+                    return Promise.resolve(pSetFilter).then(function () {
+                        setCustomFilterInputValue(oView, sMatchedName);
+                        return true;
                     });
                 });
             }).catch(function (err) {
                 // eslint-disable-next-line no-console
-                console.warn("ListReportExt: Error during default manager filter init:", err);
-                return null;
+                console.warn("ListReportExt: Failed to apply default manager filter:", err);
+                return false;
             });
         },
 
@@ -379,31 +405,8 @@ sap.ui.define([
         }
     });
 
-    ListReportExt.filterProMngName = function (sValue) {
-        if (!sValue || !sValue.trim()) {
-            return null;
-        }
-        return new Filter({
-            path: "_Promanager",
-            operator: FilterOperator.Any,
-            variable: "p",
-            condition: new Filter("p/Mngname", FilterOperator.Contains, sValue.trim())
-        });
-    };
-
-    ListReportExt.onFilterSubmit = function (oEvent) {
-        var oInput = oEvent.getSource();
-        var oView = oInput;
-        while (oView && !oView.isA("sap.ui.core.mvc.View")) {
-            oView = oView.getParent();
-        }
-        if (oView) {
-            var oFilterBar = findFilterBar(oView);
-            if (oFilterBar && typeof oFilterBar.triggerSearch === "function") {
-                oFilterBar.triggerSearch();
-            }
-        }
-    };
+    ListReportExt.filterProMngName = FilterHandler.filterProMngName;
+    ListReportExt.onFilterSubmit = FilterHandler.onFilterSubmit;
 
     return ListReportExt;
 });
