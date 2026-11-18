@@ -124,46 +124,107 @@ sap.ui.define([
         }
     }
 
-    function getLogonUserName() {
+    function getLogonUserCandidates() {
         if (!window.sap || !sap.ushell || !sap.ushell.Container || typeof sap.ushell.Container.getServiceAsync !== "function") {
-            return Promise.resolve(null);
+            return Promise.resolve([]);
         }
         return sap.ushell.Container.getServiceAsync("UserInfo").then(function (oUserInfo) {
-            if (!oUserInfo || typeof oUserInfo.getFullName !== "function") {
-                return null;
+            if (!oUserInfo) {
+                return [];
             }
-            var sFullName = oUserInfo.getFullName() || "";
-            var sCleanName = sFullName.replace(/\s+/g, "");
-            return sCleanName || null;
+            var sFirst = (typeof oUserInfo.getFirstName === "function" && oUserInfo.getFirstName()) || "";
+            var sLast = (typeof oUserInfo.getLastName === "function" && oUserInfo.getLastName()) || "";
+            var sFull = (typeof oUserInfo.getFullName === "function" && oUserInfo.getFullName()) || "";
+
+            var aCandidates = [];
+            // 1. 성 + 이름 (한국어 표준: "권" + "순호" -> "권순호")
+            if (sLast && sFirst) {
+                var sLastFirst = (sLast + sFirst).replace(/\s+/g, "");
+                if (sLastFirst && aCandidates.indexOf(sLastFirst) === -1) {
+                    aCandidates.push(sLastFirst);
+                }
+            }
+            // 2. FullName 공백 제거 (예: "순호 권" -> "순호권" 또는 "권 순호" -> "권순호")
+            if (sFull) {
+                var sCleanFull = sFull.replace(/\s+/g, "");
+                if (sCleanFull && aCandidates.indexOf(sCleanFull) === -1) {
+                    aCandidates.push(sCleanFull);
+                }
+                // 3글자 한국 이름 순서 반전 대비 ("순호권" -> "권순호")
+                if (sCleanFull.length === 3) {
+                    var sReversed = sCleanFull.charAt(2) + sCleanFull.substring(0, 2);
+                    if (sReversed && aCandidates.indexOf(sReversed) === -1) {
+                        aCandidates.push(sReversed);
+                    }
+                }
+            }
+            // 3. 이름 + 성 ("순호" + "권" -> "순호권")
+            if (sFirst && sLast) {
+                var sFirstLast = (sFirst + sLast).replace(/\s+/g, "");
+                if (sFirstLast && aCandidates.indexOf(sFirstLast) === -1) {
+                    aCandidates.push(sFirstLast);
+                }
+            }
+
+            return aCandidates;
         }).catch(function (err) {
             // eslint-disable-next-line no-console
             console.warn("ListReportExt: Failed to get UserInfo:", err);
-            return null;
+            return [];
         });
     }
 
-    function verifyOperManager(oModel, sCleanName) {
+    function verifyOperManager(oModel, aCandidates) {
+        if (!aCandidates || !aCandidates.length) {
+            return Promise.resolve(null);
+        }
         return new Promise(function (resolve) {
             try {
-                var oListBinding = oModel.bindList("/OperManager", null, null, [
-                    new Filter("Mngname", FilterOperator.EQ, sCleanName)
-                ], {
+                var aFilters = aCandidates.map(function (sName) {
+                    return new Filter("Mngname", FilterOperator.EQ, sName);
+                });
+                var oCombinedFilter = aFilters.length > 1 ? new Filter({ filters: aFilters, and: false }) : aFilters[0];
+
+                var oListBinding = oModel.bindList("/OperManager", null, null, [oCombinedFilter], {
                     $top: 1
                 });
                 oListBinding.requestContexts(0, 1).then(function (aContexts) {
-                    var bExists = aContexts && aContexts.length > 0;
-                    resolve(bExists);
+                    if (aContexts && aContexts.length > 0) {
+                        var oContext = aContexts[0];
+                        var oData = (typeof oContext.getObject === "function" && oContext.getObject()) ||
+                                    (typeof oContext.getProperty === "function" && { Mngname: oContext.getProperty("Mngname") });
+                        var sMatchedName = (oData && oData.Mngname) || aCandidates[0];
+                        resolve(sMatchedName);
+                    } else {
+                        resolve(null);
+                    }
                 }).catch(function (err) {
                     // eslint-disable-next-line no-console
                     console.warn("ListReportExt: OperManager verification failed:", err);
-                    resolve(false);
+                    resolve(null);
                 });
             } catch (e) {
                 // eslint-disable-next-line no-console
                 console.warn("ListReportExt: OperManager check exception:", e);
-                resolve(false);
+                resolve(null);
             }
         });
+    }
+
+    function setCustomFilterInputValue(oView, sValue) {
+        if (!oView || !sValue) {
+            return;
+        }
+        var aInputs = oView.findAggregatedObjects(true, function (c) {
+            return c && c.isA && c.isA("sap.m.Input") && c.getId && c.getId().indexOf("CustomFilterProMngNameInput") !== -1;
+        });
+        if (aInputs && aInputs.length > 0) {
+            aInputs.forEach(function (oInput) {
+                if (oInput.getValue() !== sValue) {
+                    oInput.setValue(sValue);
+                }
+            });
+        }
     }
 
     var ListReportExt = ControllerExtension.extend("zsp.itsm.zspfrequest.ext.controller.ListReportExt", {
@@ -187,6 +248,9 @@ sap.ui.define([
                     if (!this._bDefaultFilterInitialized) {
                         this._initDefaultManagerFilter();
                     }
+                    if (this._sDefaultManagerName) {
+                        setCustomFilterInputValue(this.base.getView(), this._sDefaultManagerName);
+                    }
                 }
             },
             onAfterRendering: function () {
@@ -196,14 +260,58 @@ sap.ui.define([
                     attachGridRowNavigation(that);
                 }, 500);
 
+                if (that._sDefaultManagerName) {
+                    setCustomFilterInputValue(that.base.getView(), that._sDefaultManagerName);
+                }
+
                 // onAfterStateApplied 가 호출되지 않는 버전 대비
                 setTimeout(function () {
                     that._cleanup();
                     if (!that._bDefaultFilterInitialized) {
                         that._initDefaultManagerFilter();
                     }
+                    if (that._sDefaultManagerName) {
+                        setCustomFilterInputValue(that.base.getView(), that._sDefaultManagerName);
+                    }
                 }, 300);
             }
+        },
+
+        _applyDefaultManagerFilter: function (sMatchedName) {
+            var that = this;
+            if (!sMatchedName) {
+                return;
+            }
+            that._sDefaultManagerName = sMatchedName;
+
+            var oView = that.base.getView();
+            var oFilterBar = findFilterBar(oView);
+            var oExtensionAPI = that.base.getExtensionAPI();
+
+            if (oExtensionAPI && typeof oExtensionAPI.setFilterValues === "function") {
+                try {
+                    oExtensionAPI.setFilterValues("CustomFilterProMngName", "EQ", sMatchedName);
+                } catch (err1) {
+                    try {
+                        oExtensionAPI.setFilterValues("CustomFilterProMngName", sMatchedName);
+                    } catch (err2) {
+                        // eslint-disable-next-line no-console
+                        console.warn("ListReportExt: setFilterValues failed:", err1, err2);
+                    }
+                }
+            }
+
+            if (oFilterBar) {
+                StateUtil.applyExternalState(oFilterBar, {
+                    filter: {
+                        CustomFilterProMngName: [
+                            { operator: "EQ", values: [sMatchedName] }
+                        ]
+                    }
+                }).catch(function () {});
+            }
+
+            setCustomFilterInputValue(oView, sMatchedName);
         },
 
         _initDefaultManagerFilter: function () {
@@ -213,14 +321,13 @@ sap.ui.define([
             }
             that._bDefaultFilterInitialized = true;
 
-            return getLogonUserName().then(function (sCleanName) {
-                if (!sCleanName) {
+            return getLogonUserCandidates().then(function (aCandidates) {
+                if (!aCandidates || !aCandidates.length) {
                     return null;
                 }
 
                 var oView = that.base.getView();
                 var oFilterBar = findFilterBar(oView);
-                var oExtensionAPI = that.base.getExtensionAPI();
 
                 var pState = oFilterBar ? StateUtil.retrieveExternalState(oFilterBar) : Promise.resolve(null);
                 return pState.then(function (oState) {
@@ -231,16 +338,16 @@ sap.ui.define([
                         return null;
                     }
 
-                    var oModel = oView.getModel();
+                    var oModel = oView.getModel() || (that.base.getAppComponent && that.base.getAppComponent().getModel());
                     if (!oModel || typeof oModel.bindList !== "function") {
                         // eslint-disable-next-line no-console
                         console.warn("ListReportExt: ODataModel not ready for OperManager check.");
                         return null;
                     }
 
-                    return verifyOperManager(oModel, sCleanName).then(function (bExists) {
-                        if (bExists && oExtensionAPI && typeof oExtensionAPI.setFilterValues === "function") {
-                            oExtensionAPI.setFilterValues("CustomFilterProMngName", sCleanName);
+                    return verifyOperManager(oModel, aCandidates).then(function (sMatchedName) {
+                        if (sMatchedName) {
+                            that._applyDefaultManagerFilter(sMatchedName);
                         }
                         return null;
                     });
