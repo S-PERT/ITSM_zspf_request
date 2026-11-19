@@ -9,6 +9,7 @@ sap.ui.define([
     "use strict";
 
     var sOperatorName = FilterHandler.OPERATOR_NAME;
+    var sDefaultUnassignedText = "미지정";
 
     // 외부 앱(Cross-App Navigation)에서 진입 시 유지할 필터 (화이트리스트)
     var aAllowedFilters = ["Custno", "CustomFilterProMngName"];
@@ -127,59 +128,42 @@ sap.ui.define([
         }
     }
 
-    function addCandidate(aList, sVal) {
-        var sClean = (sVal || "").replace(/\s+/g, "");
-        if (sClean && aList.indexOf(sClean) === -1) {
-            aList.push(sClean);
-        }
-    }
-
-    function getLogonUserCandidates() {
+    function getLogonUserId() {
         if (!window.sap || !sap.ushell || !sap.ushell.Container || typeof sap.ushell.Container.getServiceAsync !== "function") {
-            return Promise.resolve([]);
+            return Promise.resolve(null);
         }
         return sap.ushell.Container.getServiceAsync("UserInfo").then(function (oUserInfo) {
             if (!oUserInfo) {
-                return [];
+                return null;
             }
-            var sFirst = (typeof oUserInfo.getFirstName === "function" && oUserInfo.getFirstName()) || "";
-            var sLast = (typeof oUserInfo.getLastName === "function" && oUserInfo.getLastName()) || "";
-            var sFull = (typeof oUserInfo.getFullName === "function" && oUserInfo.getFullName()) || "";
-
-            var aCandidates = [];
-            if (sLast && sFirst) {
-                addCandidate(aCandidates, sLast + sFirst);
+            var sUserId = (typeof oUserInfo.getId === "function" && oUserInfo.getId()) || "";
+            if (!sUserId && typeof oUserInfo.getUser === "function" && oUserInfo.getUser()) {
+                var oUser = oUserInfo.getUser();
+                sUserId = (typeof oUser.getId === "function" && oUser.getId()) || "";
             }
-            if (sFull) {
-                addCandidate(aCandidates, sFull);
-                var sCleanFull = sFull.replace(/\s+/g, "");
-                if (sCleanFull.length === 3) {
-                    addCandidate(aCandidates, sCleanFull.charAt(2) + sCleanFull.substring(0, 2));
-                }
-            }
-            if (sFirst && sLast) {
-                addCandidate(aCandidates, sFirst + sLast);
-            }
-            return aCandidates;
+            sUserId = String(sUserId || "").trim();
+            return sUserId || null;
         }).catch(function (err) {
             // eslint-disable-next-line no-console
             console.warn("ListReportExt: Failed to get UserInfo:", err);
-            return [];
+            return null;
         });
     }
 
-    function verifyOperManager(oModel, aCandidates) {
-        if (!aCandidates || !aCandidates.length) {
+    function findManagerNameByUserId(oModel, sUserId) {
+        if (!sUserId) {
             return Promise.resolve(null);
         }
         return new Promise(function (resolve) {
             try {
-                var aFilters = aCandidates.map(function (sName) {
-                    return new Filter("Mngname", FilterOperator.EQ, sName);
-                });
-                var oCombinedFilter = aFilters.length > 1 ? new Filter({ filters: aFilters, and: false }) : aFilters[0];
+                var sUpperId = sUserId.toUpperCase();
+                var aFilters = [new Filter("Uname", FilterOperator.EQ, sUpperId)];
+                if (sUserId !== sUpperId) {
+                    aFilters.push(new Filter("Uname", FilterOperator.EQ, sUserId));
+                }
+                var oFilter = aFilters.length > 1 ? new Filter({ filters: aFilters, and: false }) : aFilters[0];
 
-                var oListBinding = oModel.bindList("/OperManager", null, null, [oCombinedFilter], {
+                var oListBinding = oModel.bindList("/OperManager", null, null, [oFilter], {
                     $top: 1
                 });
                 oListBinding.requestContexts(0, 1).then(function (aContexts) {
@@ -187,10 +171,11 @@ sap.ui.define([
                         var oContext = aContexts[0];
                         var oData = (typeof oContext.getObject === "function" && oContext.getObject()) ||
                                     (typeof oContext.getProperty === "function" && { Mngname: oContext.getProperty("Mngname") });
-                        var sMatchedName = (oData && oData.Mngname) || aCandidates[0];
-                        resolve(sMatchedName);
+                        var sMngname = oData && oData.Mngname ? String(oData.Mngname).trim() : "";
+                        resolve(sMngname || sDefaultUnassignedText);
                     } else {
-                        resolve(null);
+                        // 시스템 ID(Uname)와 일치하는 운영 담당자가 없으면 "미지정" 세팅
+                        resolve(sDefaultUnassignedText);
                     }
                 }).catch(function (err) {
                     // eslint-disable-next-line no-console
@@ -214,6 +199,10 @@ sap.ui.define([
         });
         if (aInputs && aInputs.length > 0) {
             aInputs.forEach(function (oInput) {
+                var oFilterValuesModel = oInput.getModel("filterValues");
+                if (oFilterValuesModel && typeof oFilterValuesModel.setProperty === "function") {
+                    oFilterValuesModel.setProperty("/CustomFilterProMngName", sValue);
+                }
                 if (oInput.getValue() !== sValue) {
                     oInput.setValue(sValue);
                 }
@@ -294,8 +283,8 @@ sap.ui.define([
 
         _resolveDefaultManagerName: function () {
             var that = this;
-            return getLogonUserCandidates().then(function (aCandidates) {
-                if (!aCandidates || !aCandidates.length) {
+            return getLogonUserId().then(function (sUserId) {
+                if (!sUserId) {
                     return null;
                 }
                 var oView = that.base.getView();
@@ -305,7 +294,7 @@ sap.ui.define([
                     console.warn("ListReportExt: ODataModel not ready for OperManager check.");
                     return null;
                 }
-                return verifyOperManager(oModel, aCandidates);
+                return findManagerNameByUserId(oModel, sUserId);
             }).catch(function (err) {
                 // eslint-disable-next-line no-console
                 console.warn("ListReportExt: Error resolving default manager name:", err);
@@ -335,8 +324,8 @@ sap.ui.define([
             var pMatched = that._pMatchedManagerName || that._resolveDefaultManagerName();
 
             return Promise.all([pCleanup, pMatched]).then(function (aResults) {
-                var sMatchedName = aResults[1];
-                if (!sMatchedName || !oFilterBar) {
+                var sDefaultFilterValue = aResults[1];
+                if (!sDefaultFilterValue || !oFilterBar) {
                     return false;
                 }
 
@@ -358,23 +347,23 @@ sap.ui.define([
                         return false;
                     }
 
-                    that._sDefaultManagerName = sMatchedName;
+                    that._sDefaultManagerName = sDefaultFilterValue;
 
                     var pSetFilter;
                     if (oExtensionAPI && typeof oExtensionAPI.setFilterValues === "function") {
-                        pSetFilter = oExtensionAPI.setFilterValues("CustomFilterProMngName", sOperatorName, sMatchedName);
+                        pSetFilter = oExtensionAPI.setFilterValues("CustomFilterProMngName", sOperatorName, sDefaultFilterValue);
                     } else {
                         pSetFilter = StateUtil.applyExternalState(oFilterBar, {
                             filter: {
                                 CustomFilterProMngName: [
-                                    { operator: sOperatorName, values: [sMatchedName] }
+                                    { operator: sOperatorName, values: [sDefaultFilterValue] }
                                 ]
                             }
                         });
                     }
 
                     return Promise.resolve(pSetFilter).then(function () {
-                        setCustomFilterInputValue(oView, sMatchedName);
+                        setCustomFilterInputValue(oView, sDefaultFilterValue);
                         return true;
                     });
                 });
