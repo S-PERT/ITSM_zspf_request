@@ -163,8 +163,8 @@ sap.ui.define([
                 }
                 var oFilter = aFilters.length > 1 ? new Filter({ filters: aFilters, and: false }) : aFilters[0];
 
-                var oListBinding = oModel.bindList("/OperManager", null, null, [oFilter], {
-                    $top: 1
+                var oListBinding = oModel.bindList("/OperManager", undefined, undefined, [oFilter], {
+                    $select: ["Manager", "Mngname", "Uname"]
                 });
                 oListBinding.requestContexts(0, 1).then(function (aContexts) {
                     if (aContexts && aContexts.length > 0) {
