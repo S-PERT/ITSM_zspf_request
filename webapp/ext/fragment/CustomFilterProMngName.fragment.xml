@@ -1,15 +1,23 @@
 <core:FragmentDefinition
     xmlns="sap.m"
     xmlns:core="sap.ui.core">
-    <Input
+    <MultiInput
         id="CustomFilterProMngNameInput"
+        showValueHelp="false"
         core:require="{ handler: 'zsp/itsm/zspfrequest/ext/controller/ListReportExt' }"
-        value="{
-            path: 'filterValues>',
-            type: 'sap.fe.macros.filter.type.Value',
-            formatOptions: {
-                operator: 'zsp.itsm.zspfrequest.ext.controller.ListReportExt.filterProMngName'
-            }
-        }"
-        submit="handler.onFilterSubmit" />
+        tokenUpdate="handler.onTokenUpdate"
+        change="handler.onInputChange"
+        submit="handler.onFilterSubmit">
+        <customData>
+            <core:CustomData
+                key="filterValue"
+                value="{
+                    path: 'filterValues>',
+                    type: 'sap.fe.macros.filter.type.Value',
+                    formatOptions: {
+                        operator: 'zsp.itsm.zspfrequest.ext.controller.ListReportExt.filterProMngName'
+                    }
+                }" />
+        </customData>
+    </MultiInput>
 </core:FragmentDefinition>

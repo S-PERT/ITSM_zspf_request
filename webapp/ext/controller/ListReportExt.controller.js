@@ -10,6 +10,7 @@ sap.ui.define([
 
     var sOperatorName = FilterHandler.OPERATOR_NAME;
     var sDefaultUnassignedText = "미지정";
+    var findFilterBar = FilterHandler.findFilterBar;
 
     // 외부 앱(Cross-App Navigation)에서 진입 시 유지할 필터 (화이트리스트)
     var aAllowedFilters = ["Custno", "CustomFilterProMngName"];
@@ -22,17 +23,6 @@ sap.ui.define([
     function isAllowed(sKey) {
         // $editState 등 FE 내부 필터는 유지
         return sKey.charAt(0) === "$" || aAllowedFilters.indexOf(sKey) !== -1;
-    }
-
-    function findFilterBar(oView) {
-        var oFB = oView.byId("fe::FilterBar::Main");
-        if (oFB) {
-            return oFB;
-        }
-        var aFound = oView.findAggregatedObjects(true, function (c) {
-            return c && c.isA && c.isA("sap.ui.mdc.FilterBar");
-        });
-        return aFound && aFound[0];
     }
 
     function restrictFilterBar(oFilterBar) {
@@ -191,23 +181,75 @@ sap.ui.define([
     }
 
     function setCustomFilterInputValue(oView, sValue) {
-        if (!oView || !sValue) {
+        if (!oView) {
             return;
         }
         var aInputs = oView.findAggregatedObjects(true, function (c) {
-            return c && c.isA && c.isA("sap.m.Input") && c.getId && c.getId().indexOf("CustomFilterProMngNameInput") !== -1;
+            return c && c.isA && (c.isA("sap.m.MultiInput") || c.isA("sap.m.Input")) &&
+                   c.getId && c.getId().indexOf("CustomFilterProMngNameInput") !== -1;
         });
         if (aInputs && aInputs.length > 0) {
             aInputs.forEach(function (oInput) {
-                var oFilterValuesModel = oInput.getModel("filterValues");
-                if (oFilterValuesModel && typeof oFilterValuesModel.setProperty === "function") {
-                    oFilterValuesModel.setProperty("/CustomFilterProMngName", sValue);
-                }
-                if (oInput.getValue() !== sValue) {
+                if (oInput.isA("sap.m.MultiInput")) {
+                    FilterHandler.ensureMultiInputInitialized(oInput);
+                    if (sValue !== undefined && sValue !== null) {
+                        FilterHandler.syncTokensFromValue(oInput, sValue);
+                        FilterHandler.applyFilterValueFromMultiInput(oInput, sValue);
+                    }
+                } else if (sValue && oInput.getValue() !== sValue) {
                     oInput.setValue(sValue);
                 }
             });
         }
+    }
+
+    function holdFilterBarSuspend(oFilterBar) {
+        if (!oFilterBar) {
+            return;
+        }
+        if (!oFilterBar._bSuspendWrapped) {
+            oFilterBar._bSuspendWrapped = true;
+            var fnOrigSetSuspend = oFilterBar.setSuspendSelection;
+            oFilterBar.setSuspendSelection = function (bSuspend) {
+                if (!bSuspend && this._bHoldUnsuspend) {
+                    this._bPendingUnsuspend = true;
+                    return this;
+                }
+                return fnOrigSetSuspend.apply(this, arguments);
+            };
+        }
+        oFilterBar._bHoldUnsuspend = true;
+        oFilterBar.setSuspendSelection(true);
+    }
+
+    function releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, bTriggerSearch) {
+        if (!oFilterBar) {
+            return Promise.resolve();
+        }
+        if (bTriggerSearch) {
+            // While suspended, triggerSearch sets oFilterBar._bSearchTriggered = true
+            if (typeof oFilterBar.triggerSearch === "function") {
+                oFilterBar.triggerSearch();
+            }
+        }
+        oFilterBar._bHoldUnsuspend = false;
+        if (oFilterBar._bPendingUnsuspend || oFilterBar.getSuspendSelection()) {
+            oFilterBar._bPendingUnsuspend = false;
+            oFilterBar.setSuspendSelection(false);
+        }
+        if (bTriggerSearch) {
+            var oFilterBarAPI = oFilterBar.getParent && oFilterBar.getParent();
+            if (oFilterBarAPI && typeof oFilterBarAPI.triggerSearch === "function") {
+                return oFilterBarAPI.triggerSearch();
+            }
+            if (oExtensionAPI && typeof oExtensionAPI.refresh === "function") {
+                return oExtensionAPI.refresh();
+            }
+            if (typeof oFilterBar.triggerSearch === "function") {
+                return oFilterBar.triggerSearch();
+            }
+        }
+        return Promise.resolve();
     }
 
     var ListReportExt = ControllerExtension.extend("zsp.itsm.zspfrequest.ext.controller.ListReportExt", {
@@ -217,11 +259,17 @@ sap.ui.define([
                 this._bDefaultFilterApplied = false;
                 this._pMatchedManagerName = null;
                 this._sDefaultManagerName = null;
-                this._hookViewStateSelectionVariant();
+                var oFilterBar = findFilterBar(this.base.getView());
+                if (oFilterBar) {
+                    holdFilterBarSuspend(oFilterBar);
+                }
             },
             viewState: {
                 onBeforeStateApplied: function (aPromises) {
-                    this._hookViewStateSelectionVariant();
+                    var oFilterBar = findFilterBar(this.base.getView());
+                    if (oFilterBar && !this._bDefaultFilterApplied) {
+                        holdFilterBarSuspend(oFilterBar);
+                    }
                     if (!this._pMatchedManagerName) {
                         this._pMatchedManagerName = this._resolveDefaultManagerName();
                         if (aPromises && Array.isArray(aPromises)) {
@@ -231,54 +279,38 @@ sap.ui.define([
                 },
                 onAfterStateApplied: function (aPromises) {
                     var that = this;
-                    this._cleanup();
-                    if (!this._bDefaultFilterApplied) {
-                        var oFallbackPromise = this._applyDefaultFilterBeforeSearch().then(function (bApplied) {
-                            if (bApplied) {
-                                var oFilterBar = findFilterBar(that.base.getView());
-                                if (oFilterBar && typeof oFilterBar.triggerSearch === "function") {
-                                    return oFilterBar.triggerSearch();
-                                }
-                            }
-                            return null;
+                    var oView = that.base.getView();
+                    var oFilterBar = findFilterBar(oView);
+                    var oExtensionAPI = that.base.getExtensionAPI();
+
+                    if (!that._bDefaultFilterApplied) {
+                        var oInitPromise = that._applyDefaultFilterBeforeSearch().then(function () {
+                            return releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, true);
+                        }).catch(function () {
+                            return releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, true);
                         });
                         if (aPromises && Array.isArray(aPromises)) {
-                            aPromises.push(oFallbackPromise);
+                            aPromises.push(oInitPromise);
                         }
-                    } else if (this._sDefaultManagerName) {
-                        setCustomFilterInputValue(this.base.getView(), this._sDefaultManagerName);
+                    } else {
+                        that._cleanup();
+                        if (that._sDefaultManagerName) {
+                            setCustomFilterInputValue(oView, that._sDefaultManagerName);
+                        }
+                        releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, false);
                     }
                 }
             },
             onAfterRendering: function () {
                 var that = this;
+                var oView = that.base.getView();
                 attachGridRowNavigation(that);
                 setTimeout(function () {
                     attachGridRowNavigation(that);
                 }, 500);
 
-                if (that._sDefaultManagerName) {
-                    setCustomFilterInputValue(that.base.getView(), that._sDefaultManagerName);
-                }
+                setCustomFilterInputValue(oView, that._sDefaultManagerName);
             }
-        },
-
-        _hookViewStateSelectionVariant: function () {
-            var that = this;
-            var oViewState = that.base && that.base.viewState;
-            if (!oViewState || oViewState._bCustomDefaultHooked || typeof oViewState._applySelectionVariant !== "function") {
-                return;
-            }
-            oViewState._bCustomDefaultHooked = true;
-            var fnOrigApplySV = oViewState._applySelectionVariant;
-            oViewState._applySelectionVariant = function () {
-                var aArgs = arguments;
-                return Promise.resolve(fnOrigApplySV.apply(this, aArgs)).then(function (vResult) {
-                    return that._applyDefaultFilterBeforeSearch().then(function () {
-                        return vResult;
-                    });
-                });
-            };
         },
 
         _resolveDefaultManagerName: function () {
@@ -396,6 +428,8 @@ sap.ui.define([
 
     ListReportExt.filterProMngName = FilterHandler.filterProMngName;
     ListReportExt.onFilterSubmit = FilterHandler.onFilterSubmit;
+    ListReportExt.onTokenUpdate = FilterHandler.onTokenUpdate;
+    ListReportExt.onInputChange = FilterHandler.onInputChange;
 
     return ListReportExt;
 });
