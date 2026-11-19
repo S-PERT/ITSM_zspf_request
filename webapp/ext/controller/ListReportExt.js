@@ -55,11 +55,27 @@ sap.ui.define([
         return null;
     }
 
-    function triggerSearchFromControl(oControl) {
-        var oView = oControl;
-        while (oView && (!oView.isA || !oView.isA("sap.ui.core.mvc.View"))) {
-            oView = oView.getParent && oView.getParent();
+    function findView(oControl) {
+        var oCur = oControl;
+        while (oCur && (!oCur.isA || !oCur.isA("sap.ui.core.mvc.View"))) {
+            oCur = oCur.getParent && oCur.getParent();
         }
+        return oCur || null;
+    }
+
+    function findFilterField(oControl) {
+        var oCur = oControl && oControl.getParent && oControl.getParent();
+        while (oCur) {
+            if (oCur.isA && oCur.isA("sap.ui.mdc.FilterField")) {
+                return oCur;
+            }
+            oCur = oCur.getParent && oCur.getParent();
+        }
+        return null;
+    }
+
+    function triggerSearchFromControl(oControl) {
+        var oView = findView(oControl);
         if (oView) {
             var oFilterBar = findFilterBar(oView);
             var oFilterBarAPI = oFilterBar && oFilterBar.getParent && oFilterBar.getParent();
@@ -108,30 +124,61 @@ sap.ui.define([
         }
     }
 
+    function clearFilterConditionEverywhere(oMultiInput) {
+        var oWrapper = findContentWrapper(oMultiInput);
+        if (oWrapper) {
+            if (typeof oWrapper.updateConditionsByFilterValues === "function") {
+                oWrapper.updateConditionsByFilterValues("");
+            }
+            if (typeof oWrapper.setConditions === "function") {
+                oWrapper.setConditions([]);
+            }
+        }
+        var oFilterField = findFilterField(oMultiInput);
+        if (oFilterField && typeof oFilterField.setConditions === "function") {
+            oFilterField.setConditions([]);
+        }
+        var oView = findView(oMultiInput);
+        var oFilterBar = oView && findFilterBar(oView);
+        if (oFilterBar) {
+            var oConditionModel = typeof oFilterBar._getConditionModel === "function" && oFilterBar._getConditionModel();
+            if (oConditionModel && typeof oConditionModel.removeAllConditions === "function") {
+                oConditionModel.removeAllConditions("CustomFilterProMngName");
+            }
+            var oFilterModel = oFilterBar.getModel && oFilterBar.getModel("$filters");
+            if (oFilterModel && typeof oFilterModel.removeAllConditions === "function") {
+                oFilterModel.removeAllConditions("CustomFilterProMngName");
+            } else if (oFilterModel && typeof oFilterModel.setProperty === "function") {
+                oFilterModel.setProperty("/conditions/CustomFilterProMngName", []);
+            }
+        }
+    }
+
     function applyFilterValueFromMultiInput(oMultiInput, sJoined) {
         if (!oMultiInput) {
             return;
         }
+        var sNormalized = String(sJoined || "").trim();
         oMultiInput._bUpdatingFromTokens = true;
         try {
             var oCustomData = getFilterCustomData(oMultiInput);
-            if (oCustomData && oCustomData.getValue() !== sJoined) {
-                oCustomData.setValue(sJoined);
+            if (oCustomData && oCustomData.getValue() !== sNormalized) {
+                oCustomData.setValue(sNormalized);
             }
             var oFilterValuesModel = oMultiInput.getModel("filterValues");
             if (oFilterValuesModel && typeof oFilterValuesModel.setProperty === "function") {
-                oFilterValuesModel.setProperty("/CustomFilterProMngName", sJoined);
+                oFilterValuesModel.setProperty("/CustomFilterProMngName", sNormalized);
             }
-            var oWrapper = findContentWrapper(oMultiInput);
-            if (oWrapper && typeof oWrapper.updateConditionsByFilterValues === "function") {
-                if (sJoined) {
+            if (sNormalized) {
+                var oWrapper = findContentWrapper(oMultiInput);
+                if (oWrapper && typeof oWrapper.updateConditionsByFilterValues === "function") {
                     oWrapper.updateConditionsByFilterValues({
                         operator: sOperatorName,
-                        values: [sJoined]
+                        values: [sNormalized]
                     }, sOperatorName);
-                } else {
-                    oWrapper.updateConditionsByFilterValues("");
                 }
+            } else {
+                clearFilterConditionEverywhere(oMultiInput);
             }
         } finally {
             oMultiInput._bUpdatingFromTokens = false;
@@ -173,13 +220,14 @@ sap.ui.define([
         oMultiInput.addEventDelegate({
             onBeforeRendering: function () {
                 var oCD = getFilterCustomData(oMultiInput);
-                if (oCD && !oMultiInput._bUpdatingFromTokens) {
+                if (oCD && !oMultiInput._bUpdatingFromTokens && !oMultiInput._bUserModified) {
                     syncTokensFromValue(oMultiInput, oCD.getValue());
                 }
             },
             onsapfocusleave: function () {
                 var sPending = String(oMultiInput.getValue() || "").trim();
                 if (sPending) {
+                    oMultiInput._bUserModified = true;
                     oMultiInput.addToken(new Token({
                         key: sPending,
                         text: sPending
@@ -195,6 +243,7 @@ sap.ui.define([
             onsapenter: function () {
                 var sPending = String(oMultiInput.getValue() || "").trim();
                 if (sPending) {
+                    oMultiInput._bUserModified = true;
                     oMultiInput.addToken(new Token({
                         key: sPending,
                         text: sPending
@@ -205,6 +254,12 @@ sap.ui.define([
                         return String(oTok.getKey() || oTok.getText() || "").trim();
                     }).filter(Boolean).join(",");
                     applyFilterValueFromMultiInput(oMultiInput, sJoined);
+                } else {
+                    var aCurrentTokens = oMultiInput.getTokens() || [];
+                    var sCurrentJoined = aCurrentTokens.map(function (oTok) {
+                        return String(oTok.getKey() || oTok.getText() || "").trim();
+                    }).filter(Boolean).join(",");
+                    applyFilterValueFromMultiInput(oMultiInput, sCurrentJoined);
                 }
                 triggerSearchFromControl(oMultiInput);
             }
@@ -221,18 +276,28 @@ sap.ui.define([
         /**
          * Custom operator for filterValues> binding in sap.fe
          * @param {string} sValue User input
-         * @returns {sap.ui.model.Filter|null} UI5 Filter instance or null
+         * @returns {sap.ui.model.Filter} UI5 Filter instance
          */
         filterProMngName: function (sValue) {
             if (!sValue || !String(sValue).trim()) {
-                return null;
+                // FilterConverter.createFilters skips conditions where oFilter.sPath === "$search" (line 186 of FilterConverter-dbg.js)
+                // Returning null here would cause an uncaught TypeError: Cannot read properties of null (reading 'sPath')
+                return new Filter({
+                    path: "$search",
+                    operator: FilterOperator.EQ,
+                    value1: ""
+                });
             }
             var aParts = String(sValue).split(",").map(function (sPart) {
                 return sPart.replace(/\s*\([^)]*\)\s*$/, "").trim();
             }).filter(Boolean);
 
             if (!aParts.length) {
-                return null;
+                return new Filter({
+                    path: "$search",
+                    operator: FilterOperator.EQ,
+                    value1: ""
+                });
             }
             if (aParts.length === 1) {
                 return new Filter({
@@ -266,6 +331,7 @@ sap.ui.define([
             if (oMultiInput._bSyncingTokens) {
                 return;
             }
+            oMultiInput._bUserModified = true;
             var aRemoved = oEvent.getParameter("removedTokens") || [];
             var aAdded = oEvent.getParameter("addedTokens") || [];
             var aActiveTokens = (oMultiInput.getTokens() || []).filter(function (oTok) {
@@ -293,6 +359,7 @@ sap.ui.define([
             ensureMultiInputInitialized(oMultiInput);
             var sValue = String(oMultiInput.getValue() || "").trim();
             if (sValue) {
+                oMultiInput._bUserModified = true;
                 oMultiInput.addToken(new Token({
                     key: sValue,
                     text: sValue
@@ -303,6 +370,12 @@ sap.ui.define([
                     return String(oTok.getKey() || oTok.getText() || "").trim();
                 }).filter(Boolean).join(",");
                 applyFilterValueFromMultiInput(oMultiInput, sJoined);
+            } else {
+                var aCurrentTokens = oMultiInput.getTokens() || [];
+                var sCurrentJoined = aCurrentTokens.map(function (oTok) {
+                    return String(oTok.getKey() || oTok.getText() || "").trim();
+                }).filter(Boolean).join(",");
+                applyFilterValueFromMultiInput(oMultiInput, sCurrentJoined);
             }
         },
 

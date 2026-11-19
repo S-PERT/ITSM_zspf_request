@@ -180,7 +180,7 @@ sap.ui.define([
         });
     }
 
-    function setCustomFilterInputValue(oView, sValue) {
+    function setCustomFilterInputValue(oView, sValue, bForce) {
         if (!oView) {
             return;
         }
@@ -192,7 +192,11 @@ sap.ui.define([
             aInputs.forEach(function (oInput) {
                 if (oInput.isA("sap.m.MultiInput")) {
                     FilterHandler.ensureMultiInputInitialized(oInput);
+                    if (!bForce && (oInput._bUserModified || oInput._bInitialDefaultSynced)) {
+                        return;
+                    }
                     if (sValue !== undefined && sValue !== null) {
+                        oInput._bInitialDefaultSynced = true;
                         FilterHandler.syncTokensFromValue(oInput, sValue);
                         FilterHandler.applyFilterValueFromMultiInput(oInput, sValue);
                     }
@@ -294,9 +298,6 @@ sap.ui.define([
                         }
                     } else {
                         that._cleanup();
-                        if (that._sDefaultManagerName) {
-                            setCustomFilterInputValue(oView, that._sDefaultManagerName);
-                        }
                         releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, false);
                     }
                 }
@@ -309,7 +310,9 @@ sap.ui.define([
                     attachGridRowNavigation(that);
                 }, 500);
 
-                setCustomFilterInputValue(oView, that._sDefaultManagerName);
+                if (that._sDefaultManagerName) {
+                    setCustomFilterInputValue(oView, that._sDefaultManagerName, false);
+                }
             }
         },
 
@@ -395,7 +398,7 @@ sap.ui.define([
                     }
 
                     return Promise.resolve(pSetFilter).then(function () {
-                        setCustomFilterInputValue(oView, sDefaultFilterValue);
+                        setCustomFilterInputValue(oView, sDefaultFilterValue, true);
                         return true;
                     });
                 });
