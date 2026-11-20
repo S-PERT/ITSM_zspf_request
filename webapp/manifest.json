@@ -166,6 +166,15 @@
               "controlConfiguration": {
                 "@com.sap.vocabularies.UI.v1.SelectionFields": {
                   "filterFields": {
+                    "CustomFilterSolutionFlag": {
+                      "label": "{i18n>filterSolutionFlag}",
+                      "template": "zsp.itsm.zspfrequest.ext.fragment.CustomFilterSolutionFlag",
+                      "availability": "Default",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "ReqType"
+                      }
+                    },
                     "CustomFilterProMngName": {
                       "label": "{i18n>filterProMngName}",
                       "template": "zsp.itsm.zspfrequest.ext.fragment.CustomFilterProMngName",

@@ -1,0 +1,23 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <MultiComboBox
+        id="CustomFilterSolutionFlagInput"
+        core:require="{ handler: 'zsp/itsm/zspfrequest/ext/controller/SolutionFlagFilter' }"
+        selectionFinish="handler.onSelectionFinish"
+        items="{
+            path: '/SolutionFlag',
+            sorter: { path: 'SolutionFlag' },
+            templateShareable: false
+        }">
+        <core:Item key="{SolutionFlag}" text="{SolutionFlagText}" />
+        <customData>
+            <core:CustomData
+                key="filterValue"
+                value="{
+                    path: 'filterValues>',
+                    formatter: 'handler.formatFilterValue'
+                }" />
+        </customData>
+    </MultiComboBox>
+</core:FragmentDefinition>

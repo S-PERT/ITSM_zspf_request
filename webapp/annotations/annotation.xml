@@ -17,7 +17,6 @@
                 <Annotation Term="UI.SelectionFields">
                     <Collection>
                         <PropertyPath>ReqType</PropertyPath>
-                        <PropertyPath>SolutionFlag</PropertyPath>
                         <PropertyPath>Zstat</PropertyPath>
                         <PropertyPath>ReqDate</PropertyPath>
                         <PropertyPath>_Promanager/Manager</PropertyPath>
