@@ -125,16 +125,39 @@ sap.ui.define([
      * then throws, so every instance under this name must carry tokenText/tokenParseRegExp/test.
      * @returns {sap.ui.mdc.condition.Operator} The registered operator
      */
+    function formatOperatorValue(oCondition) {
+        var vVal = getConditionValue(oCondition && oCondition.values);
+        return vVal === undefined || vVal === null ? "" : String(vVal);
+    }
+
+    function parseOperatorValue(vText, oType, sDisplayFormat, bDefaultOperator) {
+        if (vText && typeof vText === "object") {
+            if (vText.operator !== sOperatorName) {
+                throw new Error("not matching operator");
+            }
+            return vText.values;
+        }
+        return Operator.prototype.parse.apply(this, [vText, oType, sDisplayFormat, bDefaultOperator]);
+    }
+
+    function getOperatorModelFilter(oCondition) {
+        return oHandler.filterProMngName(getConditionValue(oCondition && oCondition.values));
+    }
+
     function ensureCustomOperatorRegistered() {
         var oOperator = FilterOperatorUtil.getOperator(sOperatorName);
         if (!oOperator) {
+            // Operator throws in its constructor unless filterOperator or getModelFilter is passed here
             oOperator = new Operator({
                 filterOperator: "",
                 tokenText: "{0}",
                 tokenFormat: "{0}",
                 tokenParse: "^(.*)$",
                 name: sOperatorName,
-                valueTypes: ["self"]
+                valueTypes: ["self"],
+                format: formatOperatorValue,
+                parse: parseOperatorValue,
+                getModelFilter: getOperatorModelFilter
             });
             FilterOperatorUtil.addOperator(oOperator);
         }
@@ -147,22 +170,22 @@ sap.ui.define([
         oOperator.test = function () {
             return true;
         };
-        oOperator.format = function (oCondition) {
-            var vVal = getConditionValue(oCondition && oCondition.values);
-            return vVal === undefined || vVal === null ? "" : String(vVal);
+        // format/parse/getModelFilter are getter-only properties; assigning them throws in strict mode
+        var mOverwrites = {
+            format: formatOperatorValue,
+            parse: parseOperatorValue,
+            getModelFilter: getOperatorModelFilter
         };
-        oOperator.parse = function (vText, oType, sDisplayFormat, bDefaultOperator) {
-            if (vText && typeof vText === "object") {
-                if (vText.operator !== sOperatorName) {
-                    throw new Error("not matching operator");
-                }
-                return vText.values;
+        Object.keys(mOverwrites).forEach(function (sMethodName) {
+            if (oOperator[sMethodName] === mOverwrites[sMethodName]) {
+                return;
             }
-            return Operator.prototype.parse.apply(this, [vText, oType, sDisplayFormat, bDefaultOperator]);
-        };
-        oOperator.getModelFilter = function (oCondition) {
-            return oHandler.filterProMngName(getConditionValue(oCondition && oCondition.values));
-        };
+            if (typeof oOperator.overwrite === "function") {
+                oOperator.overwrite(sMethodName, mOverwrites[sMethodName]);
+            } else if (oOperator._oMethodOverwrites) {
+                oOperator._oMethodOverwrites[sMethodName] = mOverwrites[sMethodName];
+            }
+        });
         oOperator._bZspPatched = true;
         return oOperator;
     }
