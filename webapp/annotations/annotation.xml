@@ -108,6 +108,27 @@
                         <PropertyValue Property="TargetEntities">
                             <Collection>
                                 <NavigationPropertyPath>_Promanager</NavigationPropertyPath>
+                                <NavigationPropertyPath>_PersnoContact</NavigationPropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                    </Record>
+                </Annotation>
+                <!-- Refresh the name and the contact card when the customer contact changes -->
+                <Annotation Term="Common.SideEffects" Qualifier="PersnoChange">
+                    <Record Type="Common.SideEffectsType">
+                        <PropertyValue Property="SourceProperties">
+                            <Collection>
+                                <PropertyPath>Persno</PropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                        <PropertyValue Property="TargetProperties">
+                            <Collection>
+                                <PropertyPath>Persname</PropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                        <PropertyValue Property="TargetEntities">
+                            <Collection>
+                                <NavigationPropertyPath>_PersnoContact</NavigationPropertyPath>
                             </Collection>
                         </PropertyValue>
                     </Record>
