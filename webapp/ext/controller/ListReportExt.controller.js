@@ -207,6 +207,9 @@ sap.ui.define([
         }
     }
 
+    // Upper bound for holding the filter bar suspended; past it the hold is released and a search runs
+    var iMaxHoldMs = 8000;
+
     function holdFilterBarSuspend(oFilterBar) {
         if (!oFilterBar) {
             return;
@@ -224,11 +227,29 @@ sap.ui.define([
         }
         oFilterBar._bHoldUnsuspend = true;
         oFilterBar.setSuspendSelection(true);
+
+        // Safety net: a hold that is never released leaves the list without any request,
+        // and "Go" does nothing while the filter bar stays suspended
+        if (oFilterBar._iHoldTimer) {
+            clearTimeout(oFilterBar._iHoldTimer);
+        }
+        oFilterBar._iHoldTimer = setTimeout(function () {
+            oFilterBar._iHoldTimer = null;
+            if (oFilterBar._bHoldUnsuspend) {
+                // eslint-disable-next-line no-console
+                console.warn("ListReportExt: filter bar hold not released in time, releasing and searching.");
+                releaseFilterBarSuspendAndSearch(oFilterBar, null, true);
+            }
+        }, iMaxHoldMs);
     }
 
     function releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, bTriggerSearch) {
         if (!oFilterBar) {
             return Promise.resolve();
+        }
+        if (oFilterBar._iHoldTimer) {
+            clearTimeout(oFilterBar._iHoldTimer);
+            oFilterBar._iHoldTimer = null;
         }
         if (bTriggerSearch) {
             // While suspended, triggerSearch sets oFilterBar._bSearchTriggered = true
@@ -288,14 +309,16 @@ sap.ui.define([
                     var oExtensionAPI = that.base.getExtensionAPI();
 
                     if (!that._bDefaultFilterApplied) {
-                        var oInitPromise = that._applyDefaultFilterBeforeSearch().then(function () {
+                        // Not pushed into aPromises: the default filter reads and writes the filter bar
+                        // state (StateUtil / setFilterValues), which waits for the state application
+                        // that would itself wait for aPromises. With an app state to restore (e.g. after
+                        // switching the quick variant tab and reloading) the two never finished.
+                        // The filter bar stays suspended until the release below, so no early search.
+                        that._applyDefaultFilterBeforeSearch().then(function () {
                             return releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, true);
                         }).catch(function () {
                             return releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, true);
                         });
-                        if (aPromises && Array.isArray(aPromises)) {
-                            aPromises.push(oInitPromise);
-                        }
                     } else {
                         that._cleanup();
                         releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, false);
