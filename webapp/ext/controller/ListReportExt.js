@@ -3,12 +3,14 @@ sap.ui.define([
     "sap/ui/model/FilterOperator",
     "sap/ui/mdc/condition/FilterOperatorUtil",
     "sap/ui/mdc/condition/Operator",
+    "sap/ui/mdc/condition/Condition",
     "sap/m/Token",
     "sap/ui/base/ManagedObjectObserver"
-], function (Filter, FilterOperator, FilterOperatorUtil, Operator, Token, ManagedObjectObserver) {
+], function (Filter, FilterOperator, FilterOperatorUtil, Operator, Condition, Token, ManagedObjectObserver) {
     "use strict";
 
     var sOperatorName = "zsp.itsm.zspfrequest.ext.controller.ListReportExt.filterProMngName";
+    var oHandler;
 
     function findFilterBar(oView) {
         var oController = oView && oView.getController && oView.getController();
@@ -63,17 +65,6 @@ sap.ui.define([
         return oCur || null;
     }
 
-    function findFilterField(oControl) {
-        var oCur = oControl && oControl.getParent && oControl.getParent();
-        while (oCur) {
-            if (oCur.isA && oCur.isA("sap.ui.mdc.FilterField")) {
-                return oCur;
-            }
-            oCur = oCur.getParent && oCur.getParent();
-        }
-        return null;
-    }
-
     function triggerSearchFromControl(oControl) {
         var oView = findView(oControl);
         if (oView) {
@@ -124,61 +115,82 @@ sap.ui.define([
         }
     }
 
-    function clearFilterConditionEverywhere(oMultiInput) {
-        var oWrapper = findContentWrapper(oMultiInput);
-        if (oWrapper) {
-            if (typeof oWrapper.updateConditionsByFilterValues === "function") {
-                oWrapper.updateConditionsByFilterValues("");
-            }
-            if (typeof oWrapper.setConditions === "function") {
-                oWrapper.setConditions([]);
-            }
-        }
-        var oFilterField = findFilterField(oMultiInput);
-        if (oFilterField && typeof oFilterField.setConditions === "function") {
-            oFilterField.setConditions([]);
-        }
-        var oView = findView(oMultiInput);
-        var oFilterBar = oView && findFilterBar(oView);
-        if (oFilterBar) {
-            var oConditionModel = typeof oFilterBar._getConditionModel === "function" && oFilterBar._getConditionModel();
-            if (oConditionModel && typeof oConditionModel.removeAllConditions === "function") {
-                oConditionModel.removeAllConditions("CustomFilterProMngName");
-            }
-            var oFilterModel = oFilterBar.getModel && oFilterBar.getModel("$filters");
-            if (oFilterModel && typeof oFilterModel.removeAllConditions === "function") {
-                oFilterModel.removeAllConditions("CustomFilterProMngName");
-            } else if (oFilterModel && typeof oFilterModel.setProperty === "function") {
-                oFilterModel.setProperty("/conditions/CustomFilterProMngName", []);
-            }
-        }
+    function getConditionValue(vValues) {
+        return Array.isArray(vValues) && vValues.length ? vValues[0] : vValues;
     }
 
+    /**
+     * Registers the custom operator, or patches an instance that is already registered.
+     * Operator leaves tokenParseRegExp undefined when tokenText is empty, and Operator#test
+     * then throws, so every instance under this name must carry tokenText/tokenParseRegExp/test.
+     * @returns {sap.ui.mdc.condition.Operator} The registered operator
+     */
+    function ensureCustomOperatorRegistered() {
+        var oOperator = FilterOperatorUtil.getOperator(sOperatorName);
+        if (!oOperator) {
+            oOperator = new Operator({
+                filterOperator: "",
+                tokenText: "{0}",
+                tokenFormat: "{0}",
+                tokenParse: "^(.*)$",
+                name: sOperatorName,
+                valueTypes: ["self"]
+            });
+            FilterOperatorUtil.addOperator(oOperator);
+        }
+        if (oOperator._bZspPatched) {
+            return oOperator;
+        }
+        oOperator.tokenText = "{0}";
+        oOperator.tokenFormat = "{0}";
+        oOperator.tokenParseRegExp = new RegExp("^(.*)$", "i");
+        oOperator.test = function () {
+            return true;
+        };
+        oOperator.format = function (oCondition) {
+            var vVal = getConditionValue(oCondition && oCondition.values);
+            return vVal === undefined || vVal === null ? "" : String(vVal);
+        };
+        oOperator.parse = function (vText, oType, sDisplayFormat, bDefaultOperator) {
+            if (vText && typeof vText === "object") {
+                if (vText.operator !== sOperatorName) {
+                    throw new Error("not matching operator");
+                }
+                return vText.values;
+            }
+            return Operator.prototype.parse.apply(this, [vText, oType, sDisplayFormat, bDefaultOperator]);
+        };
+        oOperator.getModelFilter = function (oCondition) {
+            return oHandler.filterProMngName(getConditionValue(oCondition && oCondition.values));
+        };
+        oOperator._bZspPatched = true;
+        return oOperator;
+    }
+
+    /**
+     * Writes the MultiInput tokens into the custom filter field's conditions.
+     * Conditions are set on the wrapper only; its two-way binding
+     * ($field>/conditions -> $filters>/conditions/CustomFilterProMngName) carries them to the FilterBar.
+     * @param {sap.m.MultiInput} oMultiInput The MultiInput
+     * @param {string} sJoined Comma separated token values
+     */
     function applyFilterValueFromMultiInput(oMultiInput, sJoined) {
         if (!oMultiInput) {
             return;
         }
         var sNormalized = String(sJoined || "").trim();
+        var oWrapper = findContentWrapper(oMultiInput);
+        if (!oWrapper || typeof oWrapper.setConditions !== "function") {
+            return;
+        }
         oMultiInput._bUpdatingFromTokens = true;
         try {
-            var oCustomData = getFilterCustomData(oMultiInput);
-            if (oCustomData && oCustomData.getValue() !== sNormalized) {
-                oCustomData.setValue(sNormalized);
-            }
-            var oFilterValuesModel = oMultiInput.getModel("filterValues");
-            if (oFilterValuesModel && typeof oFilterValuesModel.setProperty === "function") {
-                oFilterValuesModel.setProperty("/CustomFilterProMngName", sNormalized);
-            }
-            if (sNormalized) {
-                var oWrapper = findContentWrapper(oMultiInput);
-                if (oWrapper && typeof oWrapper.updateConditionsByFilterValues === "function") {
-                    oWrapper.updateConditionsByFilterValues({
-                        operator: sOperatorName,
-                        values: [sNormalized]
-                    }, sOperatorName);
-                }
+            if (sNormalized !== "") {
+                ensureCustomOperatorRegistered();
+                var oCondition = Condition.createCondition(sOperatorName, [sNormalized], null, null, "NotValidated");
+                oWrapper.setConditions([oCondition]);
             } else {
-                clearFilterConditionEverywhere(oMultiInput);
+                oWrapper.setConditions([]);
             }
         } finally {
             oMultiInput._bUpdatingFromTokens = false;
@@ -266,8 +278,9 @@ sap.ui.define([
         });
     }
 
-    var oHandler = {
+    oHandler = {
         OPERATOR_NAME: sOperatorName,
+        ensureCustomOperatorRegistered: ensureCustomOperatorRegistered,
         findFilterBar: findFilterBar,
         ensureMultiInputInitialized: ensureMultiInputInitialized,
         syncTokensFromValue: syncTokensFromValue,
@@ -390,32 +403,8 @@ sap.ui.define([
         }
     };
 
-    // Register custom operator synchronously in FilterOperatorUtil so setFilterValues / StateUtil works immediately
-    if (FilterOperatorUtil && Operator && !FilterOperatorUtil.getOperator(sOperatorName)) {
-        FilterOperatorUtil.addOperator(new Operator({
-            filterOperator: "",
-            tokenFormat: "",
-            name: sOperatorName,
-            valueTypes: ["self"],
-            tokenParse: "^(.*)$",
-            format: function (oValue) {
-                return Array.isArray(oValue.values) && oValue.values.length ? oValue.values[0] : oValue.values;
-            },
-            parse: function (vText, oType, sDisplayFormat, bDefaultOperator) {
-                if (typeof vText === "object") {
-                    if (vText.operator !== sOperatorName) {
-                        throw new Error("not matching operator");
-                    }
-                    return vText.values;
-                }
-                return Operator.prototype.parse.apply(this, [vText, oType, sDisplayFormat, bDefaultOperator]);
-            },
-            getModelFilter: function (oCondition) {
-                var vVal = Array.isArray(oCondition.values) && oCondition.values.length ? oCondition.values[0] : oCondition.values;
-                return oHandler.filterProMngName(vVal);
-            }
-        }));
-    }
+    // Register synchronously so setFilterValues / StateUtil can resolve the operator immediately
+    ensureCustomOperatorRegistered();
 
     return oHandler;
 });

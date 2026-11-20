@@ -11,13 +11,7 @@
         <customData>
             <core:CustomData
                 key="filterValue"
-                value="{
-                    path: 'filterValues>',
-                    type: 'sap.fe.macros.filter.type.Value',
-                    formatOptions: {
-                        operator: 'zsp.itsm.zspfrequest.ext.controller.ListReportExt.filterProMngName'
-                    }
-                }" />
+                value="{filterValues>}" />
         </customData>
     </MultiInput>
 </core:FragmentDefinition>
