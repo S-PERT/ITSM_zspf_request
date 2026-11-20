@@ -22,7 +22,7 @@
                         <PropertyPath>_Promanager/Manager</PropertyPath>
                     </Collection>
                 </Annotation>
-                <!-- List report tabs: 진행 (생성/진행/검토/대기), 완료 (해결), 전체 -->
+                <!-- List report tabs: 진행 (생성/진행/검토/대기/테스트), 완료 (해결), 전체 -->
                 <Annotation Term="UI.SelectionVariant" Qualifier="InProgress">
                     <Record Type="UI.SelectionVariantType">
                         <PropertyValue Property="Text" String="진행"/>
@@ -51,6 +51,11 @@
                                                 <PropertyValue Property="Sign" EnumMember="UI.SelectionRangeSignType/I"/>
                                                 <PropertyValue Property="Option" EnumMember="UI.SelectionRangeOptionType/EQ"/>
                                                 <PropertyValue Property="Low" String="W"/>
+                                            </Record>
+                                            <Record Type="UI.SelectionRangeType">
+                                                <PropertyValue Property="Sign" EnumMember="UI.SelectionRangeSignType/I"/>
+                                                <PropertyValue Property="Option" EnumMember="UI.SelectionRangeOptionType/EQ"/>
+                                                <PropertyValue Property="Low" String="T"/>
                                             </Record>
                                         </Collection>
                                     </PropertyValue>
