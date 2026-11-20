@@ -156,23 +156,6 @@
               "initialLoad": true,
               "contextPath": "/Main",
               "variantManagement": "Page",
-              "views": {
-                "paths": [
-                  {
-                    "key": "InProgress",
-                    "annotationPath": "com.sap.vocabularies.UI.v1.SelectionVariant#InProgress"
-                  },
-                  {
-                    "key": "Completed",
-                    "annotationPath": "com.sap.vocabularies.UI.v1.SelectionVariant#Completed"
-                  },
-                  {
-                    "key": "All",
-                    "annotationPath": "com.sap.vocabularies.UI.v1.SelectionVariant#All"
-                  }
-                ],
-                "showCounts": true
-              },
               "navigation": {
                 "Main": {
                   "detail": {
@@ -205,7 +188,22 @@
                 },
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
-                    "type": "GridTable"
+                    "type": "GridTable",
+                    "quickVariantSelection": {
+                      "paths": [
+                        {
+                          "annotationPath": "com.sap.vocabularies.UI.v1.SelectionVariant#InProgress"
+                        },
+                        {
+                          "annotationPath": "com.sap.vocabularies.UI.v1.SelectionVariant#Completed"
+                        },
+                        {
+                          "annotationPath": "com.sap.vocabularies.UI.v1.SelectionVariant#All"
+                        }
+                      ],
+                      "hideTableTitle": true,
+                      "showCounts": true
+                    }
                   },
                   "columns": {
                     "CustnoCell": {
