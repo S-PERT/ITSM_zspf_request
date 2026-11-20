@@ -4,8 +4,9 @@ sap.ui.define([
     "sap/ui/mdc/p13n/StateUtil",
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
+    "sap/ui/util/Storage",
     "zsp/itsm/zspfrequest/ext/controller/ListReportExt"
-], function (ControllerExtension, StateUtil, Filter, FilterOperator, FilterHandler) {
+], function (ControllerExtension, StateUtil, Filter, FilterOperator, Storage, FilterHandler) {
     "use strict";
 
     var sOperatorName = FilterHandler.OPERATOR_NAME;
@@ -210,6 +211,116 @@ sap.ui.define([
     // Upper bound for holding the filter bar suspended; past it the hold is released and a search runs
     var iMaxHoldMs = 8000;
 
+    // Last selected quick filter tab (진행/완료/전체), kept per browser session.
+    // FE restores it from the iAppState only when that state is not empty; on reload it often is.
+    var sQuickFilterStorageKey = "quickFilterKey";
+    var oSessionStorage = new Storage(Storage.Type.session, "zsp.itsm.zspfrequest");
+
+    function readStoredQuickFilterKey() {
+        try {
+            return oSessionStorage.get(sQuickFilterStorageKey);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function storeQuickFilterKey(sKey) {
+        try {
+            if (sKey) {
+                oSessionStorage.put(sQuickFilterStorageKey, sKey);
+            }
+        } catch (e) {
+            // storage unavailable (private mode, blocked): the tab simply is not remembered
+        }
+    }
+
+    // Filter bar conditions of the last search, kept per browser session, so a reload keeps
+    // what the user set (including a cleared manager filter) instead of re-applying the default.
+    var sFilterStateStorageKey = "filterState";
+
+    function readStoredFilterState() {
+        try {
+            var sJson = oSessionStorage.get(sFilterStateStorageKey);
+            return sJson ? JSON.parse(sJson) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function storeFilterState(oFilterBar) {
+        return StateUtil.retrieveExternalState(oFilterBar).then(function (oState) {
+            var mFilter = (oState && oState.filter) || {};
+            var mStored = {};
+            Object.keys(mFilter).forEach(function (sKey) {
+                // "$" keys ($editState, $search) belong to FE and are set by it on every load
+                if (sKey.charAt(0) !== "$" && mFilter[sKey] && mFilter[sKey].length) {
+                    mStored[sKey] = mFilter[sKey];
+                }
+            });
+            try {
+                oSessionStorage.put(sFilterStateStorageKey, JSON.stringify(mStored));
+            } catch (e) {
+                // storage unavailable: the filter simply is not remembered
+            }
+        }).catch(function () {
+            // state not retrievable: keep the previous snapshot
+        });
+    }
+
+    function getStoredManagerName(mStored) {
+        var aConds = mStored && mStored.CustomFilterProMngName;
+        var vValues = aConds && aConds[0] && aConds[0].values;
+        var vVal = Array.isArray(vValues) && vValues.length ? vValues[0] : vValues;
+        return vVal ? String(vVal) : "";
+    }
+
+    function findQuickFilter(oView) {
+        var aTables = oView ? oView.findAggregatedObjects(true, function (o) {
+            return o && o.isA && o.isA("sap.ui.mdc.Table");
+        }) : [];
+        for (var i = 0; i < aTables.length; i++) {
+            var oQuickFilter = typeof aTables[i].getQuickFilter === "function" && aTables[i].getQuickFilter();
+            if (oQuickFilter) {
+                return oQuickFilter;
+            }
+        }
+        return null;
+    }
+
+    function attachQuickFilterPersistence(oView) {
+        var oQuickFilter = findQuickFilter(oView);
+        if (!oQuickFilter || oQuickFilter._bZspPersistAttached) {
+            return;
+        }
+        oQuickFilter._bZspPersistAttached = true;
+        // SegmentedButton fires selectionChange, Select (more than three tabs) fires change
+        var sEvent = oQuickFilter.getMetadata().hasEvent("selectionChange") ? "selectionChange" : "change";
+        oQuickFilter.attachEvent(sEvent, function () {
+            storeQuickFilterKey(oQuickFilter.getSelectedKey());
+        });
+    }
+
+    /**
+     * Selects the remembered tab without rebinding; the caller's next search picks it up.
+     * @param {sap.ui.core.mvc.View} oView The list report view
+     * @returns {boolean} Whether the selection changed
+     */
+    function restoreQuickFilterKey(oView) {
+        var sKey = readStoredQuickFilterKey();
+        var oQuickFilter = findQuickFilter(oView);
+        if (!sKey || !oQuickFilter || oQuickFilter.getSelectedKey() === sKey) {
+            return false;
+        }
+        var bExists = (oQuickFilter.getItems() || []).some(function (oItem) {
+            return oItem.getKey() === sKey;
+        });
+        if (!bExists) {
+            return false;
+        }
+        oQuickFilter.setSelectedKey(sKey);
+        return true;
+    }
+
     function holdFilterBarSuspend(oFilterBar) {
         if (!oFilterBar) {
             return;
@@ -284,13 +395,18 @@ sap.ui.define([
                 this._bDefaultFilterApplied = false;
                 this._pMatchedManagerName = null;
                 this._sDefaultManagerName = null;
+                this._bStateHooksCalled = false;
+                this._bFilterStateReady = false;
                 var oFilterBar = findFilterBar(this.base.getView());
-                if (oFilterBar) {
-                    holdFilterBarSuspend(oFilterBar);
-                }
+                // No hold here: FE skips both onBeforeStateApplied and onAfterStateApplied when an
+                // iAppState carries no state for this view (ViewState.applyViewState), so a hold taken
+                // in onInit was never released and swallowed FE's own initial search.
+                // The hold is taken in onBeforeStateApplied, which FE always pairs with onAfterStateApplied.
+                this._attachDefaultFilterFallback(oFilterBar);
             },
             viewState: {
                 onBeforeStateApplied: function (aPromises) {
+                    this._bStateHooksCalled = true;
                     var oFilterBar = findFilterBar(this.base.getView());
                     if (oFilterBar && !this._bDefaultFilterApplied) {
                         holdFilterBarSuspend(oFilterBar);
@@ -314,12 +430,15 @@ sap.ui.define([
                         // that would itself wait for aPromises. With an app state to restore (e.g. after
                         // switching the quick variant tab and reloading) the two never finished.
                         // The filter bar stays suspended until the release below, so no early search.
-                        that._applyDefaultFilterBeforeSearch().then(function () {
+                        that._applyDefaultFilterBeforeSearch().then(function (bApplied) {
+                            that._bFilterStateReady = true;
                             return releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, true);
-                        }).catch(function () {
+                        }).catch(function (oErr) {
+                            that._bFilterStateReady = true;
                             return releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, true);
                         });
                     } else {
+                        that._bFilterStateReady = true;
                         that._cleanup();
                         releaseFilterBarSuspendAndSearch(oFilterBar, oExtensionAPI, false);
                     }
@@ -329,14 +448,79 @@ sap.ui.define([
                 var that = this;
                 var oView = that.base.getView();
                 attachGridRowNavigation(that);
+                attachQuickFilterPersistence(oView);
                 setTimeout(function () {
                     attachGridRowNavigation(that);
+                    attachQuickFilterPersistence(oView);
                 }, 500);
 
                 if (that._sDefaultManagerName) {
                     setCustomFilterInputValue(oView, that._sDefaultManagerName, false);
                 }
             }
+        },
+
+        /**
+         * Applies the default manager filter when FE skipped the viewState hooks
+         * (iAppState without state for this view, e.g. reload or back navigation).
+         * Runs once, after FE's own first search, and searches again with the filter.
+         * @param {sap.ui.mdc.FilterBar} oFilterBar The filter bar
+         */
+        _attachDefaultFilterFallback: function (oFilterBar) {
+            var that = this;
+            if (!oFilterBar || typeof oFilterBar.attachEventOnce !== "function") {
+                return;
+            }
+            // Remember the filter state on every search or filter change once the initial filter is settled
+            var fnStore = function () {
+                if (that._bFilterStateReady) {
+                    storeFilterState(oFilterBar);
+                }
+            };
+            oFilterBar.attachSearch(fnStore);
+            if (typeof oFilterBar.attachFiltersChanged === "function") {
+                oFilterBar.attachFiltersChanged(fnStore);
+            }
+            oFilterBar.attachEventOnce("search", function () {
+                if (that._bStateHooksCalled || that._bDefaultFilterApplied) {
+                    return;
+                }
+                var oView = that.base.getView();
+                var bTabRestored = restoreQuickFilterKey(oView);
+                var mStored = readStoredFilterState();
+
+                var pFilter;
+                if (mStored) {
+                    // Restore what the user had; an absent manager condition means it was cleared
+                    that._bDefaultFilterApplied = true;
+                    var bHasConditions = Object.keys(mStored).length > 0;
+                    pFilter = (bHasConditions ? StateUtil.applyExternalState(oFilterBar, { filter: mStored }) : Promise.resolve())
+                        .then(function () {
+                            var sManager = getStoredManagerName(mStored);
+                            if (sManager) {
+                                setCustomFilterInputValue(oView, sManager, true);
+                            }
+                            return bHasConditions;
+                        });
+                } else {
+                    pFilter = that._applyDefaultFilterBeforeSearch();
+                }
+
+                pFilter.then(function (bChanged) {
+                    that._bFilterStateReady = true;
+                    if (bChanged || bTabRestored) {
+                        var oFilterBarAPI = oFilterBar.getParent && oFilterBar.getParent();
+                        if (oFilterBarAPI && typeof oFilterBarAPI.triggerSearch === "function") {
+                            return oFilterBarAPI.triggerSearch();
+                        }
+                        return oFilterBar.triggerSearch();
+                    }
+                    storeFilterState(oFilterBar);
+                    return null;
+                }).catch(function (oErr) {
+                    that._bFilterStateReady = true;
+                });
+            });
         },
 
         _resolveDefaultManagerName: function () {
