@@ -108,6 +108,8 @@
                                 <PropertyPath>Ranks</PropertyPath>
                                 <PropertyPath>RankText</PropertyPath>
                                 <PropertyPath>ManHours</PropertyPath>
+                                <!-- 고객업체코드 입력 시 솔루션 구분 입력 가능 여부(feature control) 재조회 -->
+                                <PropertyPath>__FieldControl/SolutionFlag</PropertyPath>
                             </Collection>
                         </PropertyValue>
                         <PropertyValue Property="TargetEntities">
