@@ -40,6 +40,17 @@ sap.ui.define([
         }
     }
 
+    function refreshProManagerTable(oView) {
+        var oContext = oView && oView.getBindingContext();
+        if (!oContext || typeof oContext.requestSideEffects !== "function") {
+            return;
+        }
+        // 저장 시 반영 안내 토스트는 백엔드(proMngDelete 성공 메시지)에서 처리
+        oContext.requestSideEffects([{ $NavigationPropertyPath: "_Promanager" }]).catch(function () {
+            // ignore
+        });
+    }
+
     return ControllerExtension.extend("zsp.itsm.zspfrequest.ext.controller.ObjectPageExt", {
         override: {
             onInit: function () {
@@ -60,6 +71,18 @@ sap.ui.define([
                         var self = this;
                         var sUrl = self._itsmUrl ? self._itsmUrl.toString() : "";
                         var sMethod = self._itsmMethod ? self._itsmMethod.toString().toUpperCase() : "";
+
+                        // proMngDelete(진행담당자 논리삭제) 실행 후 진행담당자 테이블 재조회
+                        // - 행 컨텍스트에 바인딩된 액션이라 _it/_Request/_Promanager SideEffects가 부모 테이블에 전달되지 않음
+                        // - 재조회 시 SelectionPresentationVariant#Active 필터(Delflag eq '')가 적용되어 draft에서도 행이 사라짐
+                        var vBody = arguments[0];
+                        if (sMethod === "POST" && typeof vBody === "string" && vBody.indexOf("proMngDelete") !== -1) {
+                            self.addEventListener("load", function () {
+                                if (self.status >= 200 && self.status < 300) {
+                                    refreshProManagerTable(oView);
+                                }
+                            });
+                        }
 
                         if (sUrl.indexOf("/Attachment") !== -1 || sUrl.indexOf("_Attachment") !== -1) {
                             if (sMethod === "PUT" || sMethod === "PATCH" || sMethod === "POST") {
