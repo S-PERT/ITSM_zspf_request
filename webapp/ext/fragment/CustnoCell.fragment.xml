@@ -8,7 +8,6 @@
             class="sapUiTinyMarginEnd" />
         <Button
             icon="sap-icon://customer"
-            text="고객업체"
             type="Transparent"
             tooltip="고객업체(ZSPF_CUSTMASTER) 바로가기"
             press="handler.onNavigateToCustmaster"

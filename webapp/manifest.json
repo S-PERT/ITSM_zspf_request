@@ -208,7 +208,7 @@
                   "columns": {
                     "CustnoCell": {
                       "header": "고객업체",
-                      "width": "18rem",
+                      "width": "13rem",
                       "horizontalAlign": "Begin",
                       "position": {
                         "anchor": "DataField::ReqType",
