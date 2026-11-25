@@ -172,7 +172,7 @@
                       "availability": "Default",
                       "position": {
                         "placement": "After",
-                        "anchor": "ReqType"
+                        "anchor": "Custlevel"
                       }
                     },
                     "CustomFilterProMngName": {

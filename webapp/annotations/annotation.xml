@@ -13,10 +13,15 @@
     </edmx:Reference>
     <edmx:DataServices>
         <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="local">
+            <!-- 고객등급 필터: 드롭다운(MultiComboBox) + 토큰 형태로 표시 -->
+            <Annotations Target="SAP__self.MainType/Custlevel">
+                <Annotation Term="Common.ValueListWithFixedValues" Bool="true"/>
+            </Annotations>
             <Annotations Target="SAP__self.MainType">
+                <!-- 백엔드 MDE의 @UI.selectionField를 덮어씀: 필터 변경 시 여기도 같이 수정 -->
                 <Annotation Term="UI.SelectionFields">
                     <Collection>
-                        <PropertyPath>ReqType</PropertyPath>
+                        <PropertyPath>Custlevel</PropertyPath>
                         <PropertyPath>Zstat</PropertyPath>
                         <PropertyPath>ReqDate</PropertyPath>
                         <PropertyPath>_Promanager/Manager</PropertyPath>
