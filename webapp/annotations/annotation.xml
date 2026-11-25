@@ -104,6 +104,7 @@
                                 <PropertyPath>Persname</PropertyPath>
                                 <PropertyPath>ReqDate</PropertyPath>
                                 <PropertyPath>StartDate</PropertyPath>
+                                <PropertyPath>PlanDate</PropertyPath>
                                 <PropertyPath>Zlevel</PropertyPath>
                                 <PropertyPath>LevelText</PropertyPath>
                                 <PropertyPath>Ranks</PropertyPath>
@@ -170,6 +171,22 @@
                             <Collection>
                                 <PropertyPath>LevelText</PropertyPath>
                                 <PropertyPath>ManHours</PropertyPath>
+                                <!-- 완료예정일 = 시작일 + 난이도별 일수 (setPlanDate) -->
+                                <PropertyPath>PlanDate</PropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                    </Record>
+                </Annotation>
+                <Annotation Term="Common.SideEffects" Qualifier="StartDateChange">
+                    <Record Type="Common.SideEffectsType">
+                        <PropertyValue Property="SourceProperties">
+                            <Collection>
+                                <PropertyPath>StartDate</PropertyPath>
+                            </Collection>
+                        </PropertyValue>
+                        <PropertyValue Property="TargetProperties">
+                            <Collection>
+                                <PropertyPath>PlanDate</PropertyPath>
                             </Collection>
                         </PropertyValue>
                     </Record>
