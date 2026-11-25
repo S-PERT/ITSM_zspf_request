@@ -5,8 +5,11 @@ sap.ui.define([
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
     "sap/ui/util/Storage",
-    "zsp/itsm/zspfrequest/ext/controller/ListReportExt"
-], function (ControllerExtension, StateUtil, Filter, FilterOperator, Storage, FilterHandler) {
+    "zsp/itsm/zspfrequest/ext/controller/ListReportExt",
+    "sap/m/Button",
+    "sap/m/Popover",
+    "sap/m/FormattedText"
+], function (ControllerExtension, StateUtil, Filter, FilterOperator, Storage, FilterHandler, Button, Popover, FormattedText) {
     "use strict";
 
     var sOperatorName = FilterHandler.OPERATOR_NAME;
@@ -301,6 +304,43 @@ sap.ui.define([
     }
 
     /**
+     * Places a help button right after the quick filter tabs (진행/완료/전체).
+     * The mdc Table puts the quick filter into its toolbar's "between" aggregation; the button
+     * goes into the same aggregation. Called again after rendering, since the table re-adds the
+     * quick filter at the end of "between" when it is set again.
+     * @param {object} oController The controller extension
+     */
+    function attachQuickFilterHelp(oController) {
+        var oView = oController.base.getView();
+        var oQuickFilter = findQuickFilter(oView);
+        var oToolbar = oQuickFilter && oQuickFilter.getParent();
+        if (!oToolbar || oQuickFilter.sParentAggregationName !== "between") {
+            return;
+        }
+        var oButton = oController._oTabHelpButton;
+        if (!oButton) {
+            oButton = new Button({
+                icon: "sap-icon://hint",
+                type: "Transparent",
+                tooltip: "{i18n>tabHelpTooltip}",
+                press: function (oEvent) {
+                    oController._openTabHelp(oEvent.getSource());
+                }
+            });
+            oController._oTabHelpButton = oButton;
+        }
+        var iFilterIdx = oToolbar.indexOfBetween(oQuickFilter);
+        if (oButton.getParent() === oToolbar && oToolbar.indexOfBetween(oButton) === iFilterIdx + 1) {
+            return;
+        }
+        if (oButton.getParent() === oToolbar) {
+            oToolbar.removeBetween(oButton);
+            iFilterIdx = oToolbar.indexOfBetween(oQuickFilter);
+        }
+        oToolbar.insertBetween(oButton, iFilterIdx + 1);
+    }
+
+    /**
      * Selects the remembered tab without rebinding; the caller's next search picks it up.
      * @param {sap.ui.core.mvc.View} oView The list report view
      * @returns {boolean} Whether the selection changed
@@ -449,14 +489,40 @@ sap.ui.define([
                 var oView = that.base.getView();
                 attachGridRowNavigation(that);
                 attachQuickFilterPersistence(oView);
+                attachQuickFilterHelp(that);
                 setTimeout(function () {
                     attachGridRowNavigation(that);
                     attachQuickFilterPersistence(oView);
+                    attachQuickFilterHelp(that);
                 }, 500);
 
                 if (that._sDefaultManagerName) {
                     setCustomFilterInputValue(oView, that._sDefaultManagerName, false);
                 }
+            }
+        },
+
+        /**
+         * Opens the popover that explains the 진행/완료/전체 tabs.
+         * @param {sap.m.Button} oButton The help button the popover opens from
+         */
+        _openTabHelp: function (oButton) {
+            if (!this._oTabHelpPopover) {
+                this._oTabHelpPopover = new Popover({
+                    title: "{i18n>tabHelpTitle}",
+                    placement: "Bottom",
+                    contentWidth: "20rem",
+                    content: [
+                        new FormattedText({ htmlText: "{i18n>tabHelpText}" }).addStyleClass("sapUiSmallMargin")
+                    ]
+                });
+                // dependent of the view: gets the i18n model and is destroyed with the view
+                this.base.getView().addDependent(this._oTabHelpPopover);
+            }
+            if (this._oTabHelpPopover.isOpen()) {
+                this._oTabHelpPopover.close();
+            } else {
+                this._oTabHelpPopover.openBy(oButton);
             }
         },
 
