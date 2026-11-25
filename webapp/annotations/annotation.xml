@@ -103,6 +103,7 @@
                                 <PropertyPath>Persno</PropertyPath>
                                 <PropertyPath>Persname</PropertyPath>
                                 <PropertyPath>ReqDate</PropertyPath>
+                                <PropertyPath>StartDate</PropertyPath>
                                 <PropertyPath>Zlevel</PropertyPath>
                                 <PropertyPath>LevelText</PropertyPath>
                                 <PropertyPath>Ranks</PropertyPath>
