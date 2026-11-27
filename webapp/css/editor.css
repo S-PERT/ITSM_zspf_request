@@ -16,6 +16,7 @@
 .cm-editor-status{border-top:1px solid var(--sapGroup_ContentBorderColor,#e8ebf0);padding:9px 18px;font-size:12px;color:var(--sapContent_LabelColor,#768295)}
 .cm-editor-readonly{border:0;border-radius:0;box-shadow:none;background:transparent}.cm-document-readonly{min-height:0;padding:8px 0}.cm-document-readonly:empty{padding:0}
 .cm-link-panel{display:flex;gap:8px;padding:10px 18px;border-bottom:1px solid #e8ebf0}.cm-link-panel[hidden]{display:none}.cm-link-panel input{flex:1;min-width:0;padding:8px;border:1px solid #dce1e8;border-radius:6px}
+.cm-highlight-panel{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 18px;border-bottom:1px solid #e8ebf0}.cm-highlight-panel[hidden]{display:none}.cm-highlight-swatch{width:26px;height:26px;padding:0;border:1px solid #d6dce6;border-radius:50%;cursor:pointer}.cm-highlight-swatch:hover,.cm-highlight-swatch:focus-visible{outline:2px solid var(--sapContent_FocusColor,#5865d8);outline-offset:1px}.cm-highlight-panel button:not(.cm-highlight-swatch){font:inherit;font-size:13px;color:inherit;background:transparent;border:0;border-radius:6px;min-height:32px;padding:5px 9px;cursor:pointer}.cm-highlight-panel button:not(.cm-highlight-swatch):hover{background:var(--sapList_SelectionBackgroundColor,#eaf0ff)}
 @media(max-width:600px){.cm-document{padding:20px 16px}.cm-document-readonly{padding:8px 0}.cm-toolbar{padding:8px}.cm-toolbar button{padding:5px 7px}}
 
 /* FeedInput disabled(조회 모드) 상태에서도 선명한 아바타와 placeholder 예시 문구 유지 및 입력 차단 스타일 */
